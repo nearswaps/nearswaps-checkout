@@ -1,0 +1,16 @@
+{
+  "name": "nearswaps-checkout",
+  "version": "0.1.0",
+  "private": true,
+  "description": "nearswaps checkout: one script tag, the buyer pays from any wallet on any chain, NEAR Intents settles, the merchant receives the invoiced amount.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/*.test.mjs\"",
+    "serve": "node tools/serve-local.mjs",
+    "test:browser": "npx playwright test -c tests/browser"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}
