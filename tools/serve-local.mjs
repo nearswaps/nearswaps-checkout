@@ -4,6 +4,8 @@
 //
 //   http://127.0.0.1:8787/pay?to=shop.near&amount=25&asset=usdc   the pay page (web/pay.html)
 //   http://127.0.0.1:8788/                                        a merchant page on another origin with the real tag
+//   http://127.0.0.1:8788/demo-shop                               demo/shop.html, its tags pointed at the local pay page
+//   http://127.0.0.1:8787/docs/accept-payments.html               the merchant docs page (web/docs/)
 //
 // Served from web/ first. The pay page also loads a few shared nearswaps files (brand.css, fonts, theme.js, coin icons,
 // the wallet selector); with --site (or NEARSWAPS_SITE) they are read, read-only, from the nearswaps site folder.
@@ -18,6 +20,7 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const WEB = path.resolve(here, "../web");
+export const DEMO = path.resolve(here, "../demo");
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml", ".json": "application/json", ".png": "image/png", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8", ".ico": "image/x-icon", ".webp": "image/webp" };
 
@@ -165,6 +168,15 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:12px;background:#f1f3f5;
 const SHOP_JS = `window.onPaid = function (d) { var p = document.getElementById("paid"); p.style.display = "block"; p.textContent = "Paid: " + d.amount + " " + d.asset + " (" + (d.label || "") + "). Verify: " + d.statusUrl; };
 document.addEventListener("nearswaps:paid", function (e) { document.getElementById("log").textContent = "nearswaps:paid " + JSON.stringify(e.detail, null, 1); });`;
 
+/** demo/shop.html with its tags pointed at `payOrigin` instead of https://nearswaps.com (local mode). */
+export function demoShopPage(payOrigin) {
+  const html = fs.readFileSync(path.join(DEMO, "shop.html"), "utf8");
+  // Only the real tags; the sample tag the page shows as text (&lt;script ...) keeps the live address.
+  const tag = '<script src="https://nearswaps.com/checkout.js"';
+  if (!html.includes(tag)) throw new Error("demo/shop.html has no nearswaps checkout tag");
+  return html.split(tag).join(`<script src="${payOrigin}/checkout.js"`);
+}
+
 /* ---------------- the servers ---------------- */
 function sendFile(res, file) {
   const type = TYPES[path.extname(file).toLowerCase()] || "application/octet-stream";
@@ -197,6 +209,9 @@ export function start({ port = 8787, shopPort = 8788, site = process.env.NEARSWA
   });
   const shop = http.createServer((req, res) => {
     if (req.url === "/shop.js") { res.writeHead(200, { "Content-Type": "text/javascript" }); res.end(SHOP_JS); return; }
+    const sp = req.url.split("?")[0];
+    if (sp === "/demo-shop" || sp === "/demo-shop.html") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }); res.end(demoShopPage(`http://${host}:${pay.address().port}`)); return; }
+    if (sp === "/assets/demo-shop.js") return sendFile(res, path.join(DEMO, "assets", "demo-shop.js"));
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }); res.end(shopPage(`http://${host}:${pay.address().port}`));
   });
   return new Promise((resolve) => {
@@ -208,5 +223,5 @@ export function start({ port = 8787, shopPort = 8788, site = process.env.NEARSWA
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const a = process.argv.slice(2), arg = (k, d) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : d; };
   start({ port: Number(arg("--port", 8787)), shopPort: Number(arg("--shop-port", 8788)), site: arg("--site", process.env.NEARSWAPS_SITE || ""), checkout: !a.includes("--no-checkout") })
-    .then((s) => console.log(`pay page:  ${s.payOrigin}/pay?to=shop.near&amount=25&asset=usdc&label=Order%201042\nshop page: ${s.shopOrigin}/`));
+    .then((s) => console.log(`pay page:  ${s.payOrigin}/pay?to=shop.near&amount=25&asset=usdc&label=Order%201042\nshop page: ${s.shopOrigin}/\ndemo shop: ${s.shopOrigin}/demo-shop\ndocs:      ${s.payOrigin}/docs/accept-payments.html`));
 }

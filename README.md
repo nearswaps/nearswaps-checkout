@@ -2,7 +2,7 @@
 
 Accept a payment from any wallet on any chain with one script tag. The buyer pays with the coin and chain they already hold; NEAR Intents (1Click) settles it; the merchant receives exactly the invoiced amount in the asset and on the chain they chose.
 
-> README stub (session 1, 9 Nov 2026). The demo, the real payment output, the docs page and the hackathon section come in the next sessions. Nothing below is a recorded output yet.
+> README stub (sessions 1 and 2, 9 Nov 2026). The merchant docs page, the demo shop and the verifier are in; the real payment output and the hackathon section come next. Nothing below is a recorded output yet.
 
 ## The one tag
 
@@ -40,7 +40,24 @@ document.addEventListener("nearswaps:paid", (e) => {
 GET https://nearswaps.com/api/intents?status=<depositAddress>
 ```
 
-It is public and read-only, and answers the status (`SUCCESS` when delivered), the recipient, the destination asset and the amount delivered. Check all three against your order.
+It is public and read-only, and answers the status (`SUCCESS` when delivered), the recipient, the destination asset and the amount delivered. Check all three against your order, and accept each deposit address for one order only.
+
+Or, with Node 18 or later and no packages:
+
+```
+node verify-payment.mjs <depositAddress> --to shop.near --amount 25 --asset usdc
+```
+
+It prints one fact per line (status, kind, quote type, recipient, destination asset, invoiced, delivered) and exits 0 when paid, 1 otherwise. `--label "Order 1042"` checks the label too; `--api <url>` points it at another copy of the API (the local one is `http://127.0.0.1:8787/api`). The full merchant guide is `web/docs/accept-payments.html`, on the site at nearswaps.com/learn/accept-payments.html.
+
+## Try the demo shop
+
+`demo/shop.html` is a small shop with three products (1, 2 and 5 USDC) and the real tag, paying `tome.near`. When the pay page reports a payment, a "Paid" banner shows the deposit address, a link to its status call and the verifier command.
+
+- **Locally, nothing real:** `npm run serve`, then open http://127.0.0.1:8788/demo-shop. The local server serves the same file with its tags pointed at the local pay page and a mocked backend, so every quote, address and payment there is made up. Add `--site <path to the nearswaps site folder>` for the site's fonts and colours on the pay page and the docs page (http://127.0.0.1:8787/docs/accept-payments.html).
+- **On nearswaps.com:** the sync copies it to nearswaps.com/demo-shop.html. There the buttons pay `tome.near` for real, and the page says so. You can see the quote and the deposit address without sending anything.
+
+Open it over http or https: a page opened from disk has no origin, so the pay page cannot send it the "paid" message.
 
 ## How a payment works
 
@@ -63,8 +80,12 @@ No refunds beyond 1Click's own (a deposit that misses the deadline or can't be f
 | `web/pay.html`, `web/assets/pay.js`, `web/assets/pay.css` | the pay page served at nearswaps.com/pay |
 | `web/assets/vendor/qr.js` | the QR encoder: the MIT `qrcode` package's core and `dijkstrajs`, bundled unchanged by `tools/build-qr.mjs` (licences in `qr-LICENSE.txt`). **On nearswaps.com it is `/assets/pay-qr.js`** (with `pay-qr-LICENSE.txt`): the site's `assets/vendor/` folder holds only its own core files, so the sync copies the encoder under that name and points the synced `pay.js` at it |
 | `web/checkout.js` | the loader merchants add |
-| `tools/serve-local.mjs` | a local copy with a mocked backend: `npm run serve`, then open http://127.0.0.1:8787/pay?to=shop.near&amount=25 and the test shop at http://127.0.0.1:8788/ |
-| `tools/sync-to-site.mjs` | copies `web/` into the nearswaps site folder: `pay.html`, `assets/pay.js`, `assets/pay.css`, `assets/pay-qr.js` (from `web/assets/vendor/qr.js`) and `assets/pay-qr-LICENSE.txt`, `checkout.js`, and the `/pay` line in `_redirects`; nothing else, and never into `assets/vendor/` |
+| `web/docs/accept-payments.html` | the merchant docs page, in the nearswaps learn-page style. **On nearswaps.com it is `/learn/accept-payments.html`** |
+| `demo/shop.html`, `demo/assets/demo-shop.js` | the demo shop: three products, the real tag, a "Paid" banner from the `nearswaps:paid` event. On nearswaps.com: `/demo-shop.html` and `/assets/demo-shop.js` (a file, because the site's Content-Security-Policy runs no inline script) |
+| `verify-payment.mjs` | the payment verifier: Node 18 or later, no packages, exit code 0 when paid |
+| `tests/fixtures/status/` | status answers for the verifier's tests (pending, success, refunded, wrong recipient, short amount), in the shape of the backend contract; not recorded from the live site |
+| `tools/serve-local.mjs` | a local copy with a mocked backend: `npm run serve`, then open http://127.0.0.1:8787/pay?to=shop.near&amount=25, the test shop at http://127.0.0.1:8788/ and the demo shop at http://127.0.0.1:8788/demo-shop |
+| `tools/sync-to-site.mjs` | copies into the nearswaps site folder: `pay.html`, `assets/pay.js`, `assets/pay.css`, `assets/pay-qr.js` (from `web/assets/vendor/qr.js`) and `assets/pay-qr-LICENSE.txt`, `checkout.js`, `learn/accept-payments.html` (from `web/docs/`), `demo-shop.html` and `assets/demo-shop.js` (from `demo/`), and the `/pay` line in `_redirects`; nothing else, never into `assets/vendor/`, and never an HTML file with an inline script |
 | `tests/` | `npm test` (Node, no packages); `tests/browser` (Playwright at 1440 and 390 px, against the mock) |
 
 The pay page uses nearswaps' shared files (brand tokens, fonts, coin icons, the NEAR wallet selector). Run the local copy with `--site <path to the nearswaps site folder>` to serve those too; without them the page still works with fallback colours.

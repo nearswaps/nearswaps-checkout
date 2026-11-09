@@ -1,0 +1,177 @@
+<!doctype html>
+<!-- source: nearswaps-checkout web/docs/accept-payments.html (tools/sync-to-site.mjs copies it to learn/accept-payments.html) -->
+<html lang="en" data-page="learn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Accept crypto payments with one script tag · nearswaps</title>
+<meta name="description" content="Add one script tag and take payments from any wallet on any chain. NEAR Intents settles it and you receive the exact invoice in USDC, USDT or NEAR.">
+<meta property="og:title" content="Accept crypto payments with one script tag · nearswaps">
+<meta property="og:description" content="Add one script tag and take payments from any wallet on any chain. NEAR Intents settles it and you receive the exact invoice in USDC, USDT or NEAR.">
+<meta property="og:url" content="https://nearswaps.com/learn/accept-payments.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="nearswaps">
+<meta property="og:image" content="https://nearswaps.com/assets/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@nearswaps">
+<meta name="twitter:title" content="Accept crypto payments with one script tag · nearswaps">
+<meta name="twitter:description" content="Add one script tag and take payments from any wallet on any chain. NEAR Intents settles it and you receive the exact invoice in USDC, USDT or NEAR.">
+<meta name="twitter:image" content="https://nearswaps.com/assets/og-image.png">
+<meta name="ns-seo" content="static">
+<meta name="theme-color" content="#060708">
+<link rel="canonical" href="https://nearswaps.com/learn/accept-payments.html">
+<link rel="icon" type="image/svg+xml" href="/assets/brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/favicon-32.png">
+<link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
+<link rel="alternate" type="text/plain" title="llms.txt" href="/llms.txt">
+<link rel="preload" as="font" type="font/woff2" href="/assets/fonts/manrope-latin.woff2" crossorigin>
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/brand.css">
+<script src="/assets/theme.js"></script>
+<link rel="stylesheet" href="/assets/nav.css">
+<link rel="stylesheet" href="/assets/seo.css">
+<link rel="stylesheet" href="/assets/motion.css">
+<script type="module" src="/assets/seo.js"></script>
+<script src="/assets/motion.js" defer></script>
+<style>
+/* Code blocks: the one thing this page needs beyond seo.css. */
+.code{margin:0 0 18px;padding:14px 16px;background:var(--ns-raise);border:1px solid var(--ns-line);border-radius:var(--ns-r-sm);overflow-x:auto;font:13px/1.6 var(--ns-mono);color:var(--ns-ink);white-space:pre;-webkit-overflow-scrolling:touch;}
+.code code{background:none;border:0;padding:0;font-size:1em;overflow-wrap:normal;}
+.tbl td:first-child code,.tbl th code,.tbl td[data-label="Example"] code{white-space:nowrap;overflow-wrap:normal;}
+.proof{padding:14px 16px;border:1px solid var(--ns-mint);border-radius:var(--ns-r-sm);background:var(--ns-mint-soft);color:var(--ns-ink);}
+</style>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://nearswaps.com/#org","name":"nearswaps","url":"https://nearswaps.com/","logo":"https://nearswaps.com/assets/brand/icon-192.png","sameAs":["https://x.com/nearswaps"]},{"@type":"WebSite","@id":"https://nearswaps.com/#site","name":"nearswaps","url":"https://nearswaps.com/","description":"Swap any NEAR token at the best route across Rhea and Intear, with auto orders and 1-click trading.","publisher":{"@id":"https://nearswaps.com/#org"},"potentialAction":{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://nearswaps.com/terminal?q={search_term_string}"},"query-input":"required name=search_term_string"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"nearswaps","item":"https://nearswaps.com/"},{"@type":"ListItem","position":2,"name":"Learn","item":"https://nearswaps.com/learn/"},{"@type":"ListItem","position":3,"name":"Accept payments","item":"https://nearswaps.com/learn/accept-payments.html"}]},{"@type":"TechArticle","headline":"Accept crypto payments with one script tag","description":"Add one script tag and take payments from any wallet on any chain. NEAR Intents settles it and you receive the exact invoice in USDC, USDT or NEAR.","url":"https://nearswaps.com/learn/accept-payments.html","mainEntityOfPage":"https://nearswaps.com/learn/accept-payments.html","dateModified":"2026-11-09","author":{"@id":"https://nearswaps.com/#org"},"publisher":{"@id":"https://nearswaps.com/#org"}},{"@type":"FAQPage","url":"https://nearswaps.com/learn/accept-payments.html","mainEntity":[{"@type":"Question","name":"Do I need an account to accept payments?","acceptedAnswer":{"@type":"Answer","text":"No. Any NEAR account, or an address on the chain of the asset you choose, can be paid. There is no sign-up in v1."}},{"@type":"Question","name":"Which coins can my buyers pay with?","acceptedAnswer":{"@type":"Answer","text":"BTC, ETH on Ethereum, Base and Arbitrum, SOL, ZEC, USDC on Ethereum, Solana, Base and Arbitrum, USDT on Ethereum, Tron and Solana, and NEAR, USDC and USDT on NEAR."}},{"@type":"Question","name":"How do I know a payment arrived?","acceptedAnswer":{"@type":"Answer","text":"Ask GET https://nearswaps.com/api/intents?status=<depositAddress> from your server and check status SUCCESS, your recipient, your asset and an amount delivered at or above the invoice. The browser event alone is not proof."}},{"@type":"Question","name":"What does it cost?","acceptedAnswer":{"@type":"Answer","text":"A 0.5% nearswaps fee, included in the quote the buyer pays. You receive the full invoiced amount. The buyer also pays their own chain's network fee for the deposit."}},{"@type":"Question","name":"What if the buyer sends too little or too late?","acceptedAnswer":{"@type":"Answer","text":"1Click refunds the deposit to the refund address the buyer gave, on the chain they paid from. The status call then answers REFUNDED and you are not paid."}}]}]}</script>
+</head>
+<body class="has-ns-tabs">
+<header class="topbar seo-top" data-ns-header>
+<a class="ns-home" href="/" aria-label="nearswaps home"><img src="/assets/brand/lockup.svg" alt="nearswaps" width="144" height="25" class="ns-lockup"><img src="/assets/brand/mark.svg" alt="" width="26" height="28" class="ns-mark"></a>
+<nav class="ns-nav" aria-label="Main"><a class="ns-link" data-nav="swap" href="/swap">Swap</a><a class="ns-link" data-nav="terminal" href="/terminal">Terminal</a><a class="ns-link" data-nav="bridge" href="/bridge">Bridge</a><a class="ns-link" data-nav="market" href="/market">NFT Marketplace</a><a class="ns-link" data-nav="points" href="/points">Points</a><a class="ns-link" data-nav="wallet" href="/portfolio">Wallet</a></nav>
+<nav class="ns-nav seo-guides" aria-label="Guides"><a class="ns-link" href="/learn/" aria-current="page">Learn</a><a class="ns-link" href="/compare/">Compare</a><a class="ns-link" href="/tokens/">Tokens</a></nav>
+</header>
+<main class="seo-main has-side" id="main">
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/">nearswaps</a><span aria-hidden="true">/</span><a href="/learn/">Learn</a><span aria-hidden="true">/</span><span aria-current="page">Accept payments</span></nav>
+<article class="split">
+<div class="lead">
+<p class="eyebrow">Learn · nearswaps checkout</p>
+<h1>Accept crypto payments with one script tag</h1>
+<p class="answer">Add one script tag to your page. It draws a Pay button; the buyer pays with the coin they already hold, on any chain, and NEAR Intents delivers exactly your invoiced amount in the asset you chose. Before you ship anything, check the payment with the public status call. The 0.5% nearswaps fee is included in the quote.</p>
+<p class="checked">Last checked <time datetime="2026-11-09">9 Nov 2026</time></p>
+<div class="cta"><a class="btn primary" href="/demo-shop.html">Open the demo shop</a><a class="btn" href="#verify-before-you-ship">Verify a payment</a></div>
+</div>
+<aside class="side" aria-label="On this page">
+<div class="side-card"><p class="side-h">Try it</p><a class="btn primary" href="/demo-shop.html">Demo shop</a><a class="btn" href="#the-one-tag">Copy the tag</a></div>
+<nav class="toc" aria-label="On this page"><p class="side-h">On this page</p><ol><li><a href="#the-one-tag">The one tag</a></li><li><a href="#button-and-popup">The button and the pay page</a></li><li><a href="#paid-event">When the payment is delivered</a></li><li><a href="#verify-before-you-ship">Verify before you ship</a></li><li><a href="#fees">Fees</a></li><li><a href="#refunds">Refunds</a></li><li><a href="#limits">Limits and minimums</a></li><li><a href="#not-in-v1">What v1 does not do</a></li><li><a href="#for-buyers">For buyers</a></li><li><a href="#faq">Questions people ask</a></li></ol></nav>
+</aside>
+<div class="body">
+<h2 id="the-one-tag">The one tag</h2>
+<p>Put this where the button should appear. It is the whole integration on the page:</p>
+<pre class="code"><code>&lt;script src="https://nearswaps.com/checkout.js"
+        data-to="shop.near" data-amount="25" data-asset="usdc"
+        data-label="Order 1042"&gt;&lt;/script&gt;</code></pre>
+<div class="tbl"><table><thead><tr><th scope="col">Option</th><th scope="col">Meaning</th><th scope="col">Example</th></tr></thead><tbody><tr><td><code>data-to</code></td><td data-label="Meaning">Who is paid: a NEAR account, or an address on the chain of <code>data-asset</code>. Required.</td><td data-label="Example"><code>shop.near</code></td></tr><tr><td><code>data-amount</code></td><td data-label="Meaning">The invoiced amount in that asset. This is what you receive, exactly. Required.</td><td data-label="Example"><code>25</code>, <code>12.50</code></td></tr><tr><td><code>data-asset</code></td><td data-label="Meaning">What you receive, from the table below. Default <code>usdc</code>.</td><td data-label="Example"><code>usdc-base</code></td></tr><tr><td><code>data-label</code></td><td data-label="Meaning">Shown on the invoice and stored with the payment, at most 80 characters. Put your order number here.</td><td data-label="Example"><code>Order 1042</code></td></tr><tr><td><code>data-theme</code></td><td data-label="Meaning"><code>light</code> for light pages (a deeper mint with white text). Dark by default.</td><td data-label="Example"><code>light</code></td></tr><tr><td><code>data-onpaid</code></td><td data-label="Meaning">The name of a function on <code>window</code> to call when the pay page reports the payment.</td><td data-label="Example"><code>onPaid</code></td></tr></tbody></table></div>
+<p>What you can receive, and the address <code>data-to</code> must be:</p>
+<div class="tbl"><table><thead><tr><th scope="col"><code>data-asset</code></th><th scope="col">You receive</th><th scope="col"><code>data-to</code> must be</th></tr></thead><tbody><tr><td><code>usdc</code></td><td data-label="You receive">USDC on NEAR</td><td data-label="data-to must be">a NEAR account or a 64-hex implicit account</td></tr><tr><td><code>usdt</code></td><td data-label="You receive">USDT on NEAR</td><td data-label="data-to must be">a NEAR account or a 64-hex implicit account</td></tr><tr><td><code>near</code></td><td data-label="You receive">NEAR</td><td data-label="data-to must be">a NEAR account or a 64-hex implicit account</td></tr><tr><td><code>usdc-base</code></td><td data-label="You receive">USDC on Base</td><td data-label="data-to must be"><code>0x</code> and 40 hex characters</td></tr><tr><td><code>usdc-sol</code></td><td data-label="You receive">USDC on Solana</td><td data-label="data-to must be">a Solana address (base58, 32 to 44 characters)</td></tr><tr><td><code>usdc-arb</code></td><td data-label="You receive">USDC on Arbitrum</td><td data-label="data-to must be"><code>0x</code> and 40 hex characters</td></tr><tr><td><code>usdc-eth</code></td><td data-label="You receive">USDC on Ethereum</td><td data-label="data-to must be"><code>0x</code> and 40 hex characters</td></tr></tbody></table></div>
+<p>Several tags on one page are fine; each draws its own button. From your own code, without a tag on the page, load <code>checkout.js</code> once and call:</p>
+<pre class="code"><code>NearswapsCheckout.open({ to: "shop.near", amount: "25", asset: "usdc", label: "Order 1042" });</code></pre>
+
+<h2 id="button-and-popup">The button and the pay page</h2>
+<p>The tag draws a mint "Pay 25 USDC" pill with the nearswaps mark, right after the tag. It carries its own inline styles: no iframe and no stylesheet are added to your page.</p>
+<p>A click opens <code>https://nearswaps.com/pay</code> in a popup window (a new tab on phones) with the invoice in the address and your page's origin. The pay page is never framed by another site. It shows:</p>
+<ol class="steps">
+<li><strong>The invoice.</strong> Who is paid, in full, the amount, your label, and your page's origin once the browser confirms it.</li>
+<li><strong>Pay with.</strong> BTC, ETH, SOL, ZEC, USDC and USDT on their own chains, plus NEAR, USDC and USDT on NEAR, each with a quote of what the buyer sends.</li>
+<li><strong>The deposit address.</strong> The buyer gives a refund address on the chain they pay from (or connects a NEAR wallet to pay from NEAR) and gets a one-time deposit address from 1Click with the exact amount, a QR code, an "Open in wallet" link where the chain has one, and a 30-minute deadline.</li>
+<li><strong>The status.</strong> The page follows the deposit every 5 seconds: waiting, seen, processing, delivered, or refunded. It picks up again after a reload for 24 hours.</li>
+<li><strong>The receipt.</strong> Delivered: the payout transaction, and a message to your page.</li>
+</ol>
+
+<h2 id="paid-event">When the payment is delivered</h2>
+<p>The pay page posts a message to your page's origin only, and <code>checkout.js</code> turns it into a <code>nearswaps:paid</code> event on the button. It bubbles to <code>document</code>. If you named <code>data-onpaid</code>, that function is called with the same details.</p>
+<pre class="code"><code>&lt;script src="https://nearswaps.com/checkout.js"
+        data-to="shop.near" data-amount="25" data-asset="usdc"
+        data-label="Order 1042" data-onpaid="onPaid"&gt;&lt;/script&gt;</code></pre>
+<p>Then, in your own script:</p>
+<pre class="code"><code>document.addEventListener("nearswaps:paid", (e) =&gt; {
+  const { depositAddress, amount, asset, label, to, statusUrl } = e.detail;
+  // Show "thanks", then ask your server to check the payment:
+  fetch("/orders/1042/paid", { method: "POST", body: depositAddress });
+});
+window.onPaid = (detail) =&gt; console.log("paid", detail.depositAddress);</code></pre>
+<p><code>amount</code> is the invoiced amount as text (<code>"25"</code>), <code>asset</code> the <code>data-asset</code> code, <code>statusUrl</code> the status call below for this payment. Your page needs an <code>http</code> or <code>https</code> origin for the message to arrive: a file opened from disk has none.</p>
+
+<h2 id="verify-before-you-ship">Verify before you ship</h2>
+<p class="proof"><strong>The event is a convenience. The status call is the proof. Before you ship anything, ask it from your server.</strong></p>
+<pre class="code"><code>GET https://nearswaps.com/api/intents?status=&lt;depositAddress&gt;</code></pre>
+<p>It is public and read-only. Check every one of these against your order:</p>
+<div class="tbl"><table><thead><tr><th scope="col">Field</th><th scope="col">Must be</th></tr></thead><tbody><tr><td><code>status</code></td><td data-label="Must be"><code>SUCCESS</code> (delivered). Anything else is not paid yet, or not at all.</td></tr><tr><td><code>recipient</code></td><td data-label="Must be">your <code>data-to</code></td></tr><tr><td><code>destinationAsset</code></td><td data-label="Must be">the asset id of your <code>data-asset</code>, for <code>usdc</code> <code>nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1</code></td></tr><tr><td><code>swapDetails.amountOut</code></td><td data-label="Must be">the amount delivered, in base units, at or above your invoice (25 USDC is <code>25000000</code>, 6 decimals)</td></tr><tr><td><code>amount</code></td><td data-label="Must be">your invoice in base units</td></tr><tr><td><code>kind</code>, <code>swapType</code></td><td data-label="Must be"><code>checkout</code> and <code>EXACT_OUTPUT</code></td></tr><tr><td><code>label</code></td><td data-label="Must be">your <code>data-label</code>, if you set one</td></tr></tbody></table></div>
+<p>The other statuses: <code>PENDING_DEPOSIT</code> (waiting), <code>KNOWN_DEPOSIT_TX</code> (deposit seen), <code>PROCESSING</code>, <code>INCOMPLETE_DEPOSIT</code> (less than asked was sent), <code>REFUNDED</code> and <code>FAILED</code>. Accept each deposit address for one order only, and keep it with the order.</p>
+<p>In Node 18 or later:</p>
+<pre class="code"><code>const USDC_ON_NEAR = "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
+const r = await fetch("https://nearswaps.com/api/intents?status=" + encodeURIComponent(depositAddress));
+const s = await r.json();
+const paid = r.ok
+  &amp;&amp; s.status === "SUCCESS" &amp;&amp; s.kind === "checkout" &amp;&amp; s.swapType === "EXACT_OUTPUT"
+  &amp;&amp; s.recipient === "shop.near"
+  &amp;&amp; s.destinationAsset === USDC_ON_NEAR
+  &amp;&amp; s.amount === "25000000"
+  &amp;&amp; BigInt(s.swapDetails?.amountOut ?? 0) &gt;= 25000000n;</code></pre>
+<p>Or the one-liner from the <a href="https://github.com/nearswaps/nearswaps-checkout" rel="noopener">nearswaps-checkout repository</a>, Node only, no packages. It prints one fact per line and exits 0 when paid, 1 otherwise:</p>
+<pre class="code"><code>node verify-payment.mjs &lt;depositAddress&gt; --to shop.near --amount 25 --asset usdc</code></pre>
+<p>Add <code>--label "Order 1042"</code> to check the label too.</p>
+
+<h2 id="fees">Fees</h2>
+<p>nearswaps' fee is 0.5%, included in the quote: the buyer's amount carries it, and you receive the full invoiced amount. The quote is exact-output, so your amount is fixed and the buyer's amount moves with the price.</p>
+<ul>
+<li>The buyer also pays their own chain's network fee for the deposit, in their wallet.</li>
+<li>The amount to send is about 1% above the least that fills the payment, to cover price moves while the deposit confirms. 1Click sends what is not used back to the buyer's refund address.</li>
+<li>Paid out as USDC on Ethereum, the buyer pays about 0.32 USDC more for Ethereum's withdrawal.</li>
+</ul>
+<p>Every fee on nearswaps is in <a href="/learn/nearswaps-fees-and-referral.html">nearswaps fees and referral links</a>.</p>
+
+<h2 id="refunds">Refunds</h2>
+<p>Refunds are 1Click's, to the buyer's refund address on the chain they paid from. A deposit that arrives after the 30-minute deadline, is below the amount asked, or cannot be filled at the quoted price is sent back there. The status call then answers <code>REFUNDED</code> and you are not paid.</p>
+<p>A delivered payment is in your account. To refund a buyer after that, send it back yourself.</p>
+
+<h2 id="limits">Limits and minimums</h2>
+<ul>
+<li><strong>Invoices from 1 USDC.</strong> When the buyer pays with Bitcoin, from about 7 USDC.</li>
+<li>At most 5,000 USD per payment, at 1Click's price.</li>
+<li>30 minutes from the deposit address to the deposit. Bitcoin takes about 13 minutes after it confirms, so a slow Bitcoin confirmation can be refunded.</li>
+<li>Labels: at most 80 characters.</li>
+<li>Each refund address can get at most 20 deposit addresses a day (UTC, shared with nearswaps' swap and bridge), and the site gives out at most 120 an hour in all.</li>
+</ul>
+<p>The smallest payments 1Click accepted in quotes on 9 Nov 2026 (they move with fees and prices; the pay page shows the current one):</p>
+<div class="tbl"><table><thead><tr><th scope="col">Buyer pays with</th><th scope="col">You receive</th><th scope="col">Smallest accepted</th></tr></thead><tbody><tr><td>USDC on Base</td><td data-label="You receive">USDC on NEAR</td><td data-label="Smallest accepted">0.149983 USDC</td></tr><tr><td>USDC on Base</td><td data-label="You receive">USDT on NEAR</td><td data-label="Smallest accepted">0.150114 USDT</td></tr><tr><td>USDC on Base</td><td data-label="You receive">NEAR</td><td data-label="Smallest accepted">0.0414 NEAR</td></tr><tr><td>USDC on Base</td><td data-label="You receive">USDC on Solana</td><td data-label="Smallest accepted">0.139988 USDC</td></tr><tr><td>USDC on Base</td><td data-label="You receive">USDC on Arbitrum</td><td data-label="Smallest accepted">0.149983 USDC</td></tr><tr><td>ETH, SOL or NEAR on NEAR</td><td data-label="You receive">USDC on NEAR or Base</td><td data-label="Smallest accepted">0.1 USDC</td></tr><tr><td>BTC</td><td data-label="You receive">USDC on NEAR</td><td data-label="Smallest accepted">6.206565 USDC</td></tr></tbody></table></div>
+
+<h2 id="not-in-v1">What v1 does not do</h2>
+<ul>
+<li>No partial payments: one deposit pays one invoice in full.</li>
+<li>No fiat: buyers pay in crypto, you receive crypto.</li>
+<li>No webhook: the status call is the webhook. Ask it from your server.</li>
+<li>No merchant accounts: any address can be paid, with no sign-up.</li>
+<li>No refunds beyond 1Click's own, above.</li>
+</ul>
+
+<h2 id="for-buyers">For buyers</h2>
+<p><strong>Check the address matches the shop.</strong> Anyone can make a pay link to any address. Before you send, the invoice at the top of the pay page shows who is paid, in full, and the page that asked: make sure both are the shop you mean to pay. Send only the amount shown, only to the deposit address shown, before the deadline.</p>
+
+<section class="related" aria-labelledby="rel"><h2 id="rel">Read next</h2>
+<ul class="links"><li><a href="/learn/buy-near-with-card-or-another-chain.html">How to buy NEAR with a card or from another chain<small>Pay in with BTC, ETH, SOL, ZEC, USDC or USDT from their own chains.</small></a></li><li><a href="/learn/nearswaps-fees-and-referral.html">nearswaps fees and referral links<small>Every fee in one table, the cross-chain app fee included.</small></a></li><li><a href="/learn/what-is-wnear.html">What is wNEAR<small>Why NEAR shows up as wrap.near in swaps and payments.</small></a></li><li><a href="/learn/">All guides<small>Plain answers, grouped by topic.</small></a></li></ul>
+</section>
+<section class="faq" aria-labelledby="faq"><h2 id="faq">Questions people ask</h2>
+<div class="faq-item"><h3 class="faq-q">Do I need an account to accept payments?</h3><div class="faq-a">No. Any NEAR account, or an address on the chain of the asset you choose, can be paid. There is no sign-up in v1.</div></div>
+<div class="faq-item"><h3 class="faq-q">Which coins can my buyers pay with?</h3><div class="faq-a">BTC, ETH on Ethereum, Base and Arbitrum, SOL, ZEC, USDC on Ethereum, Solana, Base and Arbitrum, USDT on Ethereum, Tron and Solana, and NEAR, USDC and USDT on NEAR.</div></div>
+<div class="faq-item"><h3 class="faq-q">How do I know a payment arrived?</h3><div class="faq-a">Ask <code>GET https://nearswaps.com/api/intents?status=&lt;depositAddress&gt;</code> from your server and check status <code>SUCCESS</code>, your recipient, your asset and an amount delivered at or above the invoice. The browser event alone is not proof.</div></div>
+<div class="faq-item"><h3 class="faq-q">What does it cost?</h3><div class="faq-a">A 0.5% nearswaps fee, included in the quote the buyer pays. You receive the full invoiced amount. The buyer also pays their own chain's network fee for the deposit.</div></div>
+<div class="faq-item"><h3 class="faq-q">What if the buyer sends too little or too late?</h3><div class="faq-a">1Click refunds the deposit to the refund address the buyer gave, on the chain they paid from. The status call then answers <code>REFUNDED</code> and you are not paid.</div></div>
+</section>
+</div>
+</article>
+</main>
+<footer class="seo-foot">
+<nav aria-label="Footer"><a href="/learn/">Learn</a><a href="/compare/">Compare</a><a href="/tokens/">Tokens</a><a href="/swap">Swap</a><a href="/terminal">Terminal</a><a href="/bridge">Bridge</a><a href="/pulse">Pulse</a><a href="/market">NFT Marketplace</a><a href="/points">Points</a><a href="/check">Token check</a><a href="https://x.com/nearswaps" rel="noopener">X @nearswaps</a></nav>
+<p>nearswaps is a front end for NEAR: every trade is signed in your own NEAR wallet. Nothing on this site is financial advice. Facts were checked on the date shown on each page; pools, fees and tokens change.</p>
+</footer>
+<nav class="ns-tabs" aria-label="Sections"><a class="ns-tab" data-nav="swap" href="/swap"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13l-3.5-3.5M20 16H7l3.5 3.5"/></svg><span>Swap</span></a><a class="ns-tab" data-nav="terminal" href="/terminal"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V4M4 20h16"/><path d="M8 15v-4M12 13V7M16 16v-6"/></svg><span>Terminal</span></a><a class="ns-tab" data-nav="bridge" href="/bridge"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 16c3-6 15-6 18 0"/><path d="M6 12.2V18M12 10.5V18M18 12.2V18"/><path d="M2 18h20"/></svg><span>Bridge</span></a><a class="ns-tab" data-nav="market" href="/market"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg><span>NFTs</span></a><a class="ns-tab" data-nav="points" href="/points"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.6L12 16.4l-5.1 2.7 1-5.6-4.1-4 5.7-.8z"/></svg><span>Points</span></a><a class="ns-tab" data-nav="wallet" href="/portfolio"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M16 13.5h.01"/></svg><span>Wallet</span></a></nav>
+</body>
+</html>

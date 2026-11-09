@@ -1,0 +1,20 @@
+{
+  "_fixture": "Test data in the shape of GET /api/intents?status= for a checkout (backend contract, 9 Nov 2026). Not recorded from the live site: the checkout action is not published yet. Hashes and refund values are placeholders.",
+  "status": "PENDING_DEPOSIT",
+  "updatedAt": "2026-11-09T21:01:40.000Z",
+  "swapDetails": {
+    "amountOut": null,
+    "amountOutFormatted": null,
+    "amountOutUsd": null,
+    "refundedAmountFormatted": null,
+    "refundReason": null,
+    "destinationChainTxHashes": [],
+    "nearTxHashes": []
+  },
+  "kind": "checkout",
+  "label": "Demo shop: coffee",
+  "recipient": "tome.near",
+  "destinationAsset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+  "amount": "2000000",
+  "swapType": "EXACT_OUTPUT"
+}
