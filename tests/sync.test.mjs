@@ -34,11 +34,12 @@ test("writes exactly the allowed files and the /pay rule, QR outside the core ve
   assert.deepEqual(again.written, [], "a second run changes nothing");
 });
 
-test("--qr-vendor writes assets/vendor/qr.js, and the docs link stays once the docs page exists", () => {
+test("never writes into the core vendor folder; the docs link stays once the docs page exists", () => {
   const d = fakeSite({ "learn/accept-payments.html": "<!doctype html>" });
-  const r = sync({ site: d, qrVendor: true, log: () => {} });
-  assert.ok(r.written.includes("assets/vendor/qr.js") && r.written.includes("assets/vendor/qr-LICENSE.txt"));
-  assert.ok(fs.readFileSync(path.join(d, "assets/pay.js"), "utf8").includes('import("./vendor/qr.js")'));
+  const r = sync({ site: d, log: () => {} });
+  assert.ok(!r.written.some((f) => f.startsWith("assets/vendor/")));
+  assert.ok(![...ALLOWED].some((f) => f.startsWith("assets/vendor/")));
+  assert.deepEqual(fs.readdirSync(path.join(d, "assets", "vendor")), []);
   assert.ok(fs.readFileSync(path.join(d, "pay.html"), "utf8").includes('href="/learn/accept-payments.html"'));
 });
 

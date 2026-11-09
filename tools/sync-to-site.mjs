@@ -2,12 +2,15 @@
 // It only ever writes these, and refuses anything else:
 //   pay.html, assets/pay.js, assets/pay.css, the QR encoder with its licence, checkout.js, and one line in _redirects.
 //
-//   node tools/sync-to-site.mjs [--site <path to Nearswaps\site>] [--dry-run] [--qr-vendor]
+//   node tools/sync-to-site.mjs [--site <path to Nearswaps\site>] [--dry-run]
 //
-// The QR encoder: the repo keeps it at web/assets/vendor/qr.js. In the site, assets/vendor/** is a core folder that
-// Nearswaps\tools\check-core.mjs compares byte for byte with neko-site (an extra file there fails the check, and the
-// preview and publish scripts refuse to run), so by default it goes to assets/pay-qr.js (+ assets/pay-qr-LICENSE.txt)
-// and the synced pay.js imports it from there. --qr-vendor writes assets/vendor/qr.js instead.
+// The QR encoder has two paths, on purpose:
+//   repo  web/assets/vendor/qr.js   + web/assets/vendor/qr-LICENSE.txt
+//   site  assets/pay-qr.js          + assets/pay-qr-LICENSE.txt
+// In the site, assets/vendor/** is a core folder that must stay byte-identical to the core it is copied from
+// (Nearswaps\tools\check-core.mjs fails on any extra file there, and the preview and publish scripts refuse to run),
+// so nothing from this repo ever lands in assets/vendor/. The synced pay.js has its one import("./vendor/qr.js")
+// rewritten to import("./pay-qr.js"); the copy in the repo is unchanged.
 // The docs link: pay.html links to /learn/accept-payments.html (session 2 writes that page). Until the site has it,
 // the synced pay.html links to /learn/ so the site's link check stays green; the script says so when it does that.
 import fs from "node:fs";
@@ -21,20 +24,18 @@ export const PAY_RULE = "/pay            /pay.html                  200";
 const DOCS = "/learn/accept-payments.html";
 
 /** The files to write: [{ from (in web/), to (in the site), transform? }]. */
-export function plan({ qrVendor = false, site } = {}) {
-  const qrTo = qrVendor ? "assets/vendor/qr.js" : "assets/pay-qr.js";
-  const licTo = qrVendor ? "assets/vendor/qr-LICENSE.txt" : "assets/pay-qr-LICENSE.txt";
+export function plan({ site } = {}) {
   const docsInSite = !!site && fs.existsSync(path.join(site, DOCS.slice(1)));
   return [
     { from: "pay.html", to: "pay.html", transform: (s) => (docsInSite ? s : replaceOnce(s, `href="${DOCS}"`, 'href="/learn/"')), note: docsInSite ? "" : `docs link points at /learn/ until ${DOCS} is in the site` },
-    { from: "assets/pay.js", to: "assets/pay.js", transform: (s) => (qrVendor ? s : replaceOnce(s, 'import("./vendor/qr.js")', 'import("./pay-qr.js")')) },
+    { from: "assets/pay.js", to: "assets/pay.js", transform: (s) => replaceOnce(s, 'import("./vendor/qr.js")', 'import("./pay-qr.js")') },
     { from: "assets/pay.css", to: "assets/pay.css" },
-    { from: "assets/vendor/qr.js", to: qrTo },
-    { from: "assets/vendor/qr-LICENSE.txt", to: licTo },
+    { from: "assets/vendor/qr.js", to: "assets/pay-qr.js" },
+    { from: "assets/vendor/qr-LICENSE.txt", to: "assets/pay-qr-LICENSE.txt" },
     { from: "checkout.js", to: "checkout.js" },
   ];
 }
-export const ALLOWED = new Set(["pay.html", "assets/pay.js", "assets/pay.css", "assets/vendor/qr.js", "assets/vendor/qr-LICENSE.txt", "assets/pay-qr.js", "assets/pay-qr-LICENSE.txt", "checkout.js", "_redirects"]);
+export const ALLOWED = new Set(["pay.html", "assets/pay.js", "assets/pay.css", "assets/pay-qr.js", "assets/pay-qr-LICENSE.txt", "checkout.js", "_redirects"]);
 
 function replaceOnce(s, a, b) {
   const n = s.split(a).length - 1;
@@ -61,11 +62,11 @@ export function problems(name, text) {
   return out;
 }
 
-export function sync({ site = DEFAULT_SITE, dryRun = false, qrVendor = false, log = console.log } = {}) {
+export function sync({ site = DEFAULT_SITE, dryRun = false, log = console.log } = {}) {
   site = path.resolve(site);
   if (!fs.existsSync(path.join(site, "_redirects"))) throw new Error("not a nearswaps site folder (no _redirects): " + site);
   const written = [], same = [];
-  const jobs = plan({ qrVendor, site }).map((j) => {
+  const jobs = plan({ site }).map((j) => {
     let text = fs.readFileSync(path.join(WEB, j.from), "utf8");
     if (j.transform) text = j.transform(text);
     return { ...j, text };
@@ -76,7 +77,7 @@ export function sync({ site = DEFAULT_SITE, dryRun = false, qrVendor = false, lo
   const before = fs.readFileSync(redirectsPath, "utf8");
   jobs.push({ to: "_redirects", text: withPayRule(before) });
   for (const j of jobs) {
-    if (!ALLOWED.has(j.to)) throw new Error("not on the list of files this script may write: " + j.to);
+    if (!ALLOWED.has(j.to) || j.to.startsWith("assets/vendor/")) throw new Error("not on the list of files this script may write: " + j.to);
     const dest = path.join(site, j.to);
     const old = fs.existsSync(dest) ? fs.readFileSync(dest, "utf8") : null;
     if (old === j.text) { same.push(j.to); continue; }
@@ -91,7 +92,7 @@ export function sync({ site = DEFAULT_SITE, dryRun = false, qrVendor = false, lo
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const a = process.argv.slice(2), i = a.indexOf("--site");
   try {
-    const r = sync({ site: i >= 0 ? a[i + 1] : process.env.NEARSWAPS_SITE || DEFAULT_SITE, dryRun: a.includes("--dry-run"), qrVendor: a.includes("--qr-vendor") });
+    const r = sync({ site: i >= 0 ? a[i + 1] : process.env.NEARSWAPS_SITE || DEFAULT_SITE, dryRun: a.includes("--dry-run") });
     console.log(`\nsync-to-site: ${r.written.length} written, ${r.same.length} unchanged.`);
   } catch (e) { console.error("sync-to-site: " + e.message); process.exit(1); }
 }

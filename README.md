@@ -61,10 +61,10 @@ No refunds beyond 1Click's own (a deposit that misses the deadline or can't be f
 | Path | What |
 |---|---|
 | `web/pay.html`, `web/assets/pay.js`, `web/assets/pay.css` | the pay page served at nearswaps.com/pay |
-| `web/assets/vendor/qr.js` | the QR encoder: the MIT `qrcode` package's core and `dijkstrajs`, bundled unchanged by `tools/build-qr.mjs` (licences in `qr-LICENSE.txt`) |
+| `web/assets/vendor/qr.js` | the QR encoder: the MIT `qrcode` package's core and `dijkstrajs`, bundled unchanged by `tools/build-qr.mjs` (licences in `qr-LICENSE.txt`). **On nearswaps.com it is `/assets/pay-qr.js`** (with `pay-qr-LICENSE.txt`): the site's `assets/vendor/` folder holds only its own core files, so the sync copies the encoder under that name and points the synced `pay.js` at it |
 | `web/checkout.js` | the loader merchants add |
 | `tools/serve-local.mjs` | a local copy with a mocked backend: `npm run serve`, then open http://127.0.0.1:8787/pay?to=shop.near&amount=25 and the test shop at http://127.0.0.1:8788/ |
-| `tools/sync-to-site.mjs` | copies `web/` into the nearswaps site folder |
+| `tools/sync-to-site.mjs` | copies `web/` into the nearswaps site folder: `pay.html`, `assets/pay.js`, `assets/pay.css`, `assets/pay-qr.js` (from `web/assets/vendor/qr.js`) and `assets/pay-qr-LICENSE.txt`, `checkout.js`, and the `/pay` line in `_redirects`; nothing else, and never into `assets/vendor/` |
 | `tests/` | `npm test` (Node, no packages); `tests/browser` (Playwright at 1440 and 390 px, against the mock) |
 
 The pay page uses nearswaps' shared files (brand tokens, fonts, coin icons, the NEAR wallet selector). Run the local copy with `--site <path to the nearswaps site folder>` to serve those too; without them the page still works with fallback colours.
