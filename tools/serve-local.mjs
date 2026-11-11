@@ -1,8 +1,9 @@
 // A local copy of nearswaps checkout with a mocked backend, for hand checks and the browser test. No packages, no network.
 //
-//   node tools/serve-local.mjs [--port 8787] [--shop-port 8788] [--site <path to Nearswaps\site>] [--no-checkout]
+//   node tools/serve-local.mjs [--port 8787] [--shop-port 8788] [--site <path to Nearswaps\site>] [--no-checkout] [--mock-wallets]
 //
 //   http://127.0.0.1:8787/pay?to=shop.near&amount=25&asset=usdc   the pay page (web/pay.html)
+//   http://127.0.0.1:8787/pay?to=shop.near&amount=1&wallets=mock  the same with a mocked Phantom and MetaMask in the page
 //   http://127.0.0.1:8788/                                        a merchant page on another origin with the real tag
 //   http://127.0.0.1:8788/demo-shop                               demo/shop.html, its tags pointed at the local pay page
 //   http://127.0.0.1:8787/docs/accept-payments.html               the merchant docs page (web/docs/)
@@ -13,10 +14,16 @@
 // /mock-1click/v0/status stands in for 1Click's own status (the deposit-address check). A deposit moves on by itself:
 // waiting for 20 s, then seen, processing, delivered (control it with /__mock?speed=fast|slow|stop and ?checkout=off).
 // --no-checkout answers the "checkout" action 400 "unknown action", as the proxy does before the action ships.
+// ?wallets=mock on /pay (or --mock-wallets for every /pay, so the shops' buttons get them too) adds /__mock-wallets.js:
+// a mocked Phantom (Wallet Standard, Solana) and a mocked MetaMask (EIP-6963, starts on Ethereum, knows Base, adds
+// Arbitrum on request). Each asks with the browser's confirm box before "sending": OK approves, Cancel rejects (4001).
+// The mock's "soltx" answers the unsigned transfer from tools/mock-soltx.mjs (the site builder's layout); a mocked send
+// tells the mock (/__mock?sent=) so the deposit moves on at once. Nothing reaches a chain.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { mockSolTx, mockSolAddress } from "./mock-soltx.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const WEB = path.resolve(here, "../web");
@@ -69,7 +76,7 @@ function depFor(chain, n) {
   const b58 = (len) => Array.from({ length: len }, (_, i) => B58[(n * 11 + i * 17) % 58]).join("");
   if (chain === "btc") return "bc1q" + Array.from({ length: 38 }, (_, i) => "qpzry9x8gf2tvdw0s3jn54khce6mua7l"[(n * 5 + i * 7) % 32]).join("");
   if (chain === "eth" || chain === "base" || chain === "arb") return "0x" + hex(40);
-  if (chain === "sol") return b58(44);
+  if (chain === "sol") return mockSolAddress(n);   // a real 32-byte key: the mock's soltx builds transfers to it
   if (chain === "zec") return "t1" + b58(33);
   if (chain === "tron") return "T" + b58(33);
   return hex(64);
@@ -96,6 +103,8 @@ export function createMock(opts = {}) {
     if (u.pathname === "/__mock") {
       if (u.searchParams.get("speed")) state.speed = u.searchParams.get("speed");
       if (u.searchParams.get("checkout")) state.checkout = u.searchParams.get("checkout") !== "off";
+      const sent = u.searchParams.get("sent");
+      if (sent) { const rec = state.deps.get(sent === "last-soltx" ? state.lastSolTx || "" : sent); if (rec) rec.sent = true; }
       return { status: 200, body: { checkout: state.checkout, speed: state.speed } };
     }
     if (u.pathname.startsWith("/mock-1click/v0/status")) {
@@ -145,6 +154,15 @@ export function createMock(opts = {}) {
       const amountOut = scale((usd / d.price) * 0.994, d.decimals).toString();
       return { status: 200, body: { dry: true, quote: { amountIn: String(b.amount), amountOut, minAmountOut: amountOut, timeEstimate: 40 }, appFeeBps: 50 } };
     }
+    if (b.action === "soltx") {
+      const rec = state.deps.get(String(b.depositAddress || ""));
+      const o = rec && origin(rec.request.originAsset);
+      if (!rec || !o || o.chain !== "sol") return { status: 400, body: { error: "Unknown deposit address (the quote wasn't made here)" } };
+      if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(b.from || ""))) return { status: 400, body: { error: "bad Solana address" } };
+      state.lastSolTx = String(b.depositAddress);
+      try { return { status: 200, body: mockSolTx({ from: b.from, to: b.depositAddress, amount: rec.quote.amountIn, mint: o.contract || null, decimals: o.decimals }) }; }
+      catch (e) { return { status: 400, body: { error: "bad Solana address" } }; }
+    }
     if (b.action === "submit") { const rec = state.deps.get(b.depositAddress); if (rec) rec.sent = true; return { status: 200, body: { ok: true, status: "KNOWN_DEPOSIT_TX", submitted: true } }; }
     return { status: 400, body: { error: "unknown action" } };
   }
@@ -177,6 +195,68 @@ export function demoShopPage(payOrigin) {
   return html.split(tag).join(`<script src="${payOrigin}/checkout.js"`);
 }
 
+/* ---------------- mocked wallets for the pay page (?wallets=mock) ---------------- */
+export const MOCK_PHANTOM_ADDRESS = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
+export const MOCK_METAMASK_ADDRESS = "0x5B38Da6a701c568545dCfcB03FcB875f56beddC4";
+/** pay.html with the mocked wallets loaded before the page's own script. */
+export function withMockWallets(html) {
+  const tag = '<script type="module" src="/assets/pay.js"></script>';
+  if (!html.includes(tag)) throw new Error("pay.html has no pay.js tag");
+  return html.replace(tag, '<script src="/__mock-wallets.js"></script>\n' + tag);
+}
+// Plain browser script (served as a file). Each wallet answers like the real one's API, and asks with confirm().
+export const MOCK_WALLETS_JS = String.raw`(function () {
+  var REJECT = { code: 4001, message: "User rejected the request." };
+  var tell = function (dep) { try { fetch("/__mock?sent=" + encodeURIComponent(dep), { cache: "no-store" }); } catch (e) {} };
+  var hex = function (n) { var s = "", b = crypto.getRandomValues(new Uint8Array(n)); for (var i = 0; i < n; i++) s += b[i].toString(16).padStart(2, "0"); return s; };
+  var icon = function (bg, letter) { return "data:image/svg+xml," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'><rect width='28' height='28' rx='8' fill='" + bg + "'/><text x='14' y='19' font-family='sans-serif' font-size='14' font-weight='700' fill='#fff' text-anchor='middle'>" + letter + "</text></svg>"); };
+
+  /* MetaMask (EIP-6963): starts on Ethereum, knows Base, adds Arbitrum when asked (4902 first, as the real one). */
+  var chain = "0x1", known = { "0x1": 1, "0x2105": 1 };
+  var mm = { isMetaMask: true, request: function (a) {
+    var m = a && a.method, p = (a && a.params) || [];
+    if (m === "eth_requestAccounts" || m === "eth_accounts") return Promise.resolve(["${MOCK_METAMASK_ADDRESS}"]);
+    if (m === "eth_chainId") return Promise.resolve(chain);
+    if (m === "wallet_switchEthereumChain") {
+      var id = p[0] && p[0].chainId;
+      if (!known[id]) return Promise.reject({ code: 4902, message: "Unrecognized chain ID " + id });
+      if (!confirm("Mock MetaMask: switch to chain " + id + "?")) return Promise.reject(REJECT);
+      chain = id; return Promise.resolve(null);
+    }
+    if (m === "wallet_addEthereumChain") {
+      if (!confirm("Mock MetaMask: add " + (p[0] && p[0].chainName) + " and switch to it?")) return Promise.reject(REJECT);
+      known[p[0].chainId] = 1; chain = p[0].chainId; return Promise.resolve(null);
+    }
+    if (m === "eth_sendTransaction") {
+      var tx = p[0] || {}, dep = tx.data ? "0x" + String(tx.data).slice(34, 74) : String(tx.to);
+      if (!confirm("Mock MetaMask on chain " + chain + ": send this transaction?\n" + JSON.stringify(tx, null, 1) + "\nOK approves, Cancel rejects.")) return Promise.reject(REJECT);
+      tell(dep); return Promise.resolve("0x" + hex(32));
+    }
+    return Promise.reject({ code: 4200, message: "Not in the mock: " + m });
+  } };
+  var info = { uuid: "mock-metamask", name: "MetaMask", icon: icon("#E2761B", "M"), rdns: "io.metamask.mock" };
+  var announce = function () { window.dispatchEvent(new CustomEvent("eip6963:announceProvider", { detail: Object.freeze({ info: info, provider: mm }) })); };
+  window.addEventListener("eip6963:requestProvider", announce);
+  announce();
+
+  /* Phantom (Wallet Standard, Solana mainnet): connect, then signAndSendTransaction of the bytes it is given. */
+  var acct = { address: "${MOCK_PHANTOM_ADDRESS}", publicKey: new Uint8Array(32), chains: ["solana:mainnet"], features: ["solana:signAndSendTransaction"] };
+  var ph = { version: "1.0.0", name: "Phantom", icon: icon("#AB9FF2", "P"), chains: ["solana:mainnet"], accounts: [], features: {
+    "standard:connect": { version: "1.0.0", connect: function () {
+      if (!ph.accounts.length && !confirm("Mock Phantom: connect ${MOCK_PHANTOM_ADDRESS}?")) return Promise.reject(new Error("User rejected the request."));
+      ph.accounts = [acct]; return Promise.resolve({ accounts: ph.accounts });
+    } },
+    "solana:signAndSendTransaction": { version: "1.0.0", supportedTransactionVersions: ["legacy"], signAndSendTransaction: function (i) {
+      if (!confirm("Mock Phantom: sign and send a " + i.transaction.length + "-byte transaction on " + i.chain + "?\nOK approves, Cancel rejects.")) return Promise.reject(new Error("User rejected the request."));
+      tell("last-soltx"); return Promise.resolve([{ signature: crypto.getRandomValues(new Uint8Array(64)) }]);
+    } },
+  } };
+  var reg = function (api) { api.register(ph); };
+  window.addEventListener("wallet-standard:app-ready", function (e) { reg(e.detail); });
+  try { window.dispatchEvent(new CustomEvent("wallet-standard:register-wallet", { detail: reg })); } catch (e) {}
+})();
+`;
+
 /* ---------------- the servers ---------------- */
 function sendFile(res, file) {
   const type = TYPES[path.extname(file).toLowerCase()] || "application/octet-stream";
@@ -187,7 +267,7 @@ function safeJoin(root, p) {
   const f = path.normalize(path.join(root, decodeURIComponent(p)));
   return f.startsWith(root) ? f : null;
 }
-export function start({ port = 8787, shopPort = 8788, site = process.env.NEARSWAPS_SITE || "", checkout = true, host = "127.0.0.1" } = {}) {
+export function start({ port = 8787, shopPort = 8788, site = process.env.NEARSWAPS_SITE || "", checkout = true, host = "127.0.0.1", mockWallets = false } = {}) {
   const mock = createMock({ checkout });
   const payOrigin = `http://${host}:${port}`;
   const pay = http.createServer((req, res) => {
@@ -200,6 +280,10 @@ export function start({ port = 8787, shopPort = 8788, site = process.env.NEARSWA
       if (m) { res.writeHead(m.status, { "Content-Type": "application/json", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" }); res.end(JSON.stringify(m.body)); return; }
       // The local copy checks deposit addresses against the mock 1Click (the page allows that on localhost only).
       if (u.pathname === "/pay" && !u.searchParams.get("oneclick")) { u.searchParams.set("oneclick", "/mock-1click"); res.writeHead(302, { Location: u.pathname + "?" + u.searchParams.toString() }); res.end(); return; }
+      if (u.pathname === "/__mock-wallets.js") { res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" }); res.end(MOCK_WALLETS_JS); return; }
+      if ((u.pathname === "/pay" || u.pathname === "/pay.html") && (mockWallets || u.searchParams.get("wallets") === "mock")) {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }); res.end(withMockWallets(fs.readFileSync(path.join(WEB, "pay.html"), "utf8"))); return;
+      }
       let p = u.pathname === "/pay" ? "/pay.html" : u.pathname === "/" ? "/pay.html" : u.pathname;
       const local = safeJoin(WEB, p);
       if (local && fs.existsSync(local) && fs.statSync(local).isFile()) return sendFile(res, local);
@@ -222,6 +306,6 @@ export function start({ port = 8787, shopPort = 8788, site = process.env.NEARSWA
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const a = process.argv.slice(2), arg = (k, d) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : d; };
-  start({ port: Number(arg("--port", 8787)), shopPort: Number(arg("--shop-port", 8788)), site: arg("--site", process.env.NEARSWAPS_SITE || ""), checkout: !a.includes("--no-checkout") })
-    .then((s) => console.log(`pay page:  ${s.payOrigin}/pay?to=shop.near&amount=25&asset=usdc&label=Order%201042\nshop page: ${s.shopOrigin}/\ndemo shop: ${s.shopOrigin}/demo-shop\ndocs:      ${s.payOrigin}/docs/accept-payments.html`));
+  start({ port: Number(arg("--port", 8787)), shopPort: Number(arg("--shop-port", 8788)), site: arg("--site", process.env.NEARSWAPS_SITE || ""), checkout: !a.includes("--no-checkout"), mockWallets: a.includes("--mock-wallets") })
+    .then((s) => console.log(`pay page:  ${s.payOrigin}/pay?to=shop.near&amount=25&asset=usdc&label=Order%201042\nshop page: ${s.shopOrigin}/\ndemo shop: ${s.shopOrigin}/demo-shop\ndocs:      ${s.payOrigin}/docs/accept-payments.html\nwallets:   ${s.payOrigin}/pay?to=shop.near&amount=1&asset=usdc&wallets=mock (a mocked Phantom and MetaMask)`));
 }

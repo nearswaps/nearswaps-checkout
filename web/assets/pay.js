@@ -206,10 +206,12 @@ export function phaseOf(status) {
 export function nextTrack(track, st, now = Date.now()) {
   if (!track || !st || typeof st !== "object" || typeof st.status !== "string" || !PHASES[st.status]) return track;
   if (isFinal(track.status)) return track;
-  const t = { ...track, status: st.status, checkedAt: now };
-  const step = PHASES[st.status].step;
+  // A deposit sent from a wallet here starts at "Deposit seen"; 1Click may still answer "waiting" until it sees it.
+  const status = track.txHash && st.status === "PENDING_DEPOSIT" ? track.status : st.status;
+  const t = { ...track, status, checkedAt: now };
+  const step = PHASES[status].step;
   if (step >= 2 && !t.seenAt) t.seenAt = now;
-  if (PHASES[st.status].final) t.finalAt = now;
+  if (PHASES[status].final) t.finalAt = now;
   const d = st.swapDetails || {};
   if (d.amountOutFormatted) t.delivered = String(d.amountOutFormatted).slice(0, 40);
   if (/^\d+$/.test(String(d.amountOut || ""))) t.deliveredRaw = String(d.amountOut);
@@ -322,6 +324,285 @@ export function payOptions(tokensView) {
   const near = NEAR_PAY.map((t) => ({ ...t, price: Number(origins[t.assetId] && origins[t.assetId].price) || 0 }));
   return list.concat(near);
 }
+/** The body of a "checkout" quote: the merchant's amount, the coin paid with, and the buyer's refund address. */
+export function checkoutBody(row, inv, refundTo, dry) {
+  return { action: "checkout", dry: !!dry, originAsset: row.assetId, destinationAsset: inv.asset.assetId, amount: inv.amountRaw,
+    recipient: inv.to, refundTo, ...(inv.label ? { label: inv.label } : {}) };
+}
+
+/* ---------- paying from a wallet in this browser ----------
+   Ported from the nearswaps swap page (swap.js: evmSend, the Solana check block, solSend, xwInit, walletsFor; 11 Nov
+   2026), with its checks unchanged. The only differences: the status line and the proxy call are passed in (say, api),
+   and the window is a parameter, so the Node tests can drive them with mocked wallets.
+   A wallet is only ever asked for its address and for ONE transfer: the quoted amount to the quote's deposit address. */
+export const EVM_CHAINS = new Set(["eth", "base", "arb"]);
+export const WALLET_CHAINS = new Set(["eth", "base", "arb", "sol"]);   // where a wallet here can send the deposit
+export const EVM_CHAIN_ID = { eth: "0x1", base: "0x2105", arb: "0xa4b1" };
+export const EVM_ADD = {
+  base: { chainId: "0x2105", chainName: "Base", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://mainnet.base.org"], blockExplorerUrls: ["https://basescan.org"] },
+  arb: { chainId: "0xa4b1", chainName: "Arbitrum One", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://arb1.arbitrum.io/rpc"], blockExplorerUrls: ["https://arbiscan.io"] },
+};
+export const TX_EXPLORER = { near: "https://nearblocks.io/txns/", eth: "https://etherscan.io/tx/", base: "https://basescan.org/tx/", arb: "https://arbiscan.io/tx/", sol: "https://solscan.io/tx/" };
+/** The explorer page of a deposit transaction, or "" where this page links none. */
+export function txUrl(chain, hash) {
+  return Object.hasOwn(TX_EXPLORER, chain || "") && /^[0-9A-Za-z]{1,120}$/.test(String(hash || "")) ? TX_EXPLORER[chain] + encodeURIComponent(hash) : "";
+}
+/** The buyer said no in the wallet: code 4001, or a message that says so (the swap page's wording test). */
+export function isCancel(err) {
+  const msg = (err && err.message) || String(err || "");
+  return !!((err && err.code === 4001) || /reject|cancel|closed|denied/i.test(msg));
+}
+/** A live quote is sent from a wallet within 60 s of being asked, and not when its deadline is under a minute away. */
+export function liveStale(live, now = Date.now()) {
+  const q = live && live.resp && live.resp.quote;
+  if (!q || !Number.isFinite(live.at)) return true;
+  const deadline = Date.parse(q.deadline || live.resp.deadline || "");
+  return now - live.at > LIVE_MAX_AGE_MS || (deadline > 0 && deadline <= now + 60e3);
+}
+
+export function b58enc(bytes) {
+  const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let n = 0n; for (const b of bytes) n = (n << 8n) | BigInt(b);
+  let out = ""; while (n > 0n) { out = A[Number(n % 58n)] + out; n /= 58n; }
+  for (const b of bytes) { if (b !== 0) break; out = "1" + out; }
+  return out;
+}
+
+/** EVM deposit: switch the wallet to the right network, then one transfer (native ETH or ERC-20 transfer). */
+export async function evmSend(p, t, dep, amount, say = () => {}) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(dep)) throw new Error("Unexpected deposit address, so nothing was sent.");
+  const accs = await p.request({ method: "eth_requestAccounts" });
+  const from = Array.isArray(accs) && accs[0];
+  if (!from) throw new Error("The wallet gave no account.");
+  const want = EVM_CHAIN_ID[t.chain];
+  if (String(await p.request({ method: "eth_chainId" })).toLowerCase() !== want) {
+    say(`Switch to ${t.chainName} in your wallet…`);
+    try { await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: want }] }); }
+    catch (e) { if (e && e.code === 4902 && EVM_ADD[t.chain]) await p.request({ method: "wallet_addEthereumChain", params: [EVM_ADD[t.chain]] }); else throw e; }
+    if (String(await p.request({ method: "eth_chainId" })).toLowerCase() !== want) throw new Error(`Your wallet is still on another network. Switch it to ${t.chainName} and press Try again.`);
+    say("Confirm the transfer in your wallet…");
+  }
+  const pad = (h) => String(h).replace(/^0x/, "").toLowerCase().padStart(64, "0");
+  const tx = t.contract ? { from, to: t.contract, value: "0x0", data: "0xa9059cbb" + pad(dep) + pad(amount.toString(16)) }
+    : { from, to: dep, value: "0x" + amount.toString(16) };
+  if (["USDC", "USDT"].includes(t.symbol) && !t.contract) throw new Error("Token contract unknown, so nothing was sent.");
+  const hash = await p.request({ method: "eth_sendTransaction", params: [tx] });
+  if (!/^0x[0-9a-fA-F]{64}$/.test(String(hash))) throw new Error("The wallet didn't return a transaction id.");
+  return String(hash);
+}
+
+/* The Solana deposit, read before the wallet sees it (the swap page's check, D-2 of the 1 Nov 2026 review).
+   The unsigned transfer comes from the site's server. It is decoded here and must be exactly the quoted deposit: ONE
+   transfer of the quoted amount to the deposit address (SOL: a System transfer; USDC / USDT: TransferChecked between
+   this wallet's and the deposit address's token accounts of that coin, with at most an idempotent creation of the
+   deposit address's token account first), signed by this wallet alone, plus at most the two compute-budget settings
+   with a priority fee of at most 0.0001 SOL. Anything else (another instruction, recipient or amount, a versioned
+   transaction, a second signer) is refused and nothing is signed. */
+export const SOL_SYSTEM = "11111111111111111111111111111111", SOL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+export const SOL_ATA = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", SOL_BUDGET = "ComputeBudget111111111111111111111111111111";
+export const SOL_MAX_PRIORITY_LAMPORTS = 100000n;
+export function b58dec(s) {
+  const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let n = 0n;
+  for (const ch of String(s)) { const i = A.indexOf(ch); if (i < 0) return null; n = n * 58n + BigInt(i); }
+  const out = [];
+  while (n > 0n) { out.push(Number(n & 255n)); n >>= 8n; }
+  for (const ch of String(s)) { if (ch !== "1") break; out.push(0); }
+  return Uint8Array.from(out.reverse());
+}
+// Program-derived addresses (the token account of an owner for a coin): the first SHA-256 that is not an ed25519 point.
+const ED_P = 2n ** 255n - 19n;
+const edMod = (a) => { const r = a % ED_P; return r < 0n ? r + ED_P : r; };
+const edPow = (b, e) => { let r = 1n; b = edMod(b); while (e > 0n) { if (e & 1n) r = (r * b) % ED_P; b = (b * b) % ED_P; e >>= 1n; } return r; };
+const ED_D = edMod(-121665n * edPow(121666n, ED_P - 2n));
+export function edOnCurve(bytes) {
+  let y = 0n;
+  for (let i = 31; i >= 0; i--) y = (y << 8n) | BigInt(bytes[i]);
+  y = edMod(y & ((1n << 255n) - 1n));
+  const yy = (y * y) % ED_P, u = edMod(yy - 1n), v = edMod(ED_D * yy + 1n);
+  if (u === 0n) return true;
+  return edPow((u * edPow(v, ED_P - 2n)) % ED_P, (ED_P - 1n) / 2n) === 1n;
+}
+export async function solAta(owner, mint) {
+  const seeds = [b58dec(owner), b58dec(SOL_TOKEN), b58dec(mint)], prog = b58dec(SOL_ATA), mark = new TextEncoder().encode("ProgramDerivedAddress");
+  if (seeds.some((x) => !x || x.length !== 32)) return null;
+  for (let bump = 255; bump >= 0; bump--) {
+    const buf = new Uint8Array(96 + 1 + 32 + mark.length);
+    seeds.forEach((x, i) => buf.set(x, 32 * i)); buf[96] = bump; buf.set(prog, 97); buf.set(mark, 129);
+    const h = new Uint8Array(await crypto.subtle.digest("SHA-256", buf));
+    if (!edOnCurve(h)) return b58enc(h);
+  }
+  return null;
+}
+/** Reads an unsigned legacy Solana transaction and compares it with the quoted deposit `want` = { from, to, amount
+ *  (BigInt), mint (null for SOL), decimals }. Returns "" when it is exactly that deposit, else what is wrong. */
+export async function solTxCheck(bytes, want) {
+  let o = 0;
+  const need = (n) => { if (o + n > bytes.length) throw new Error("short"); };
+  const sv = () => { let v = 0; for (let s = 0; s <= 14; s += 7) { need(1); const x = bytes[o++]; v |= (x & 0x7f) << s; if (!(x & 0x80)) return v; } throw new Error("length"); };
+  const u32 = (d, i) => (d[i] | (d[i + 1] << 8) | (d[i + 2] << 16) | (d[i + 3] << 24)) >>> 0;
+  const u64 = (d, i) => { let v = 0n; for (let k = 7; k >= 0; k--) v = (v << 8n) | BigInt(d[i + k]); return v; };
+  try {
+    const nSig = sv(); need(64 * nSig); o += 64 * nSig;
+    need(3);
+    if (bytes[o] & 0x80) return "a versioned transaction";
+    const nReq = bytes[o]; o += 3;
+    const nKeys = sv(); need(32 * nKeys);
+    const keys = [];
+    for (let i = 0; i < nKeys; i++, o += 32) keys.push(b58enc(bytes.slice(o, o + 32)));
+    need(32); o += 32;                                         // the recent block hash (the server's)
+    const nIx = sv(), ixs = [];
+    for (let i = 0; i < nIx; i++) {
+      need(1); const p = bytes[o++];
+      const na = sv(); need(na); const acc = Array.from(bytes.slice(o, o + na)); o += na;
+      const nd = sv(); need(nd); const data = bytes.slice(o, o + nd); o += nd;
+      if (p >= nKeys || acc.some((a) => a >= nKeys)) return "an instruction that names an unknown account";
+      ixs.push({ program: keys[p], accounts: acc.map((a) => keys[a]), data });
+    }
+    if (o !== bytes.length) return "extra data after the instructions";
+    if (nSig !== 1 || nReq !== 1 || keys[0] !== want.from) return "a signer other than your wallet alone";
+    const dst = want.mint ? await solAta(want.to, want.mint) : null, src = want.mint ? await solAta(want.from, want.mint) : null;
+    if (want.mint && (!dst || !src)) return "a coin address that can't be read";
+    let limit = null, price = null, transfers = 0, created = 0;
+    for (const ix of ixs) {
+      const a = ix.accounts, d = ix.data;
+      if (ix.program === SOL_BUDGET) {
+        if (a.length) return "a compute budget instruction with accounts";
+        if (d.length === 5 && d[0] === 2 && limit === null) limit = BigInt(u32(d, 1));
+        else if (d.length === 9 && d[0] === 3 && price === null) price = u64(d, 1);
+        else return "an unexpected compute budget instruction";
+      } else if (!want.mint && ix.program === SOL_SYSTEM) {
+        if (d.length !== 12 || u32(d, 0) !== 2) return "a System instruction other than a plain transfer";
+        if (a.length !== 2 || a[0] !== want.from || a[1] !== want.to) return "a transfer to another address";
+        if (u64(d, 4) !== want.amount) return "a transfer of another amount";
+        transfers++;
+      } else if (want.mint && ix.program === SOL_ATA) {
+        if (d.length !== 1 || d[0] !== 1 || created) return "an unexpected token account instruction";
+        if (a.length !== 6 || a[0] !== want.from || a[1] !== dst || a[2] !== want.to || a[3] !== want.mint || a[4] !== SOL_SYSTEM || a[5] !== SOL_TOKEN) return "a token account for another address";
+        created++;
+      } else if (want.mint && ix.program === SOL_TOKEN) {
+        if (d.length !== 10 || d[0] !== 12) return "a token instruction other than a checked transfer";
+        if (a.length !== 4 || a[0] !== src || a[1] !== want.mint || a[2] !== dst || a[3] !== want.from) return "a transfer to another address";
+        if (u64(d, 1) !== want.amount || d[9] !== want.decimals) return "a transfer of another amount";
+        transfers++;
+      } else return "an instruction the deposit doesn't need";
+    }
+    if (transfers !== 1) return transfers ? "more than one transfer" : "no transfer";
+    const work = ixs.filter((ix) => ix.program !== SOL_BUDGET).length;
+    const units = limit !== null ? limit : 200000n * BigInt(work);
+    if (units > 1400000n || (price !== null && (units * price) / 1000000n > SOL_MAX_PRIORITY_LAMPORTS)) return "a priority fee above 0.0001 SOL";
+    return "";
+  } catch (e) { return "a transaction that can't be read"; }
+}
+/** Solana deposit: the site builds the unsigned transfer for this quote's deposit address; it is checked here
+ *  (solTxCheck), then the wallet signs and sends it. `api(body)` posts to /api/intents. */
+export async function solSend(s, t, dep, amount, api) {
+  const feat = s.std.features["solana:signAndSendTransaction"];
+  let account = (s.std.accounts || []).find((a) => a.address === s.address);
+  if (!account) { const r = await s.std.features["standard:connect"].connect(); account = ((r && r.accounts) || []).find((a) => a.address === s.address); }
+  if (!account) throw new Error(`${s.name} isn't connected to ${s.address.slice(0, 6)}… any more. Pick the wallet again.`);
+  const b = await api({ action: "soltx", depositAddress: dep, from: account.address });
+  const bytes = Uint8Array.from(atob(String((b && b.tx) || "")), (c) => c.charCodeAt(0));
+  if (bytes.length < 100) throw new Error("Couldn't build the Solana transfer. Try again.");
+  const bad = await solTxCheck(bytes, { from: account.address, to: dep, amount, mint: t.contract || null, decimals: t.decimals });
+  if (bad) throw new Error(`The Solana transfer the site prepared isn't the quoted deposit (${bad}), so nothing was signed.`);
+  const res = await feat.signAndSendTransaction({ account, chain: "solana:mainnet", transaction: bytes });
+  const out = Array.isArray(res) ? res[0] : res;
+  if (!out || !out.signature) throw new Error("The wallet returned no signature.");
+  return b58enc(out.signature);
+}
+
+/** Can this connected wallet send the deposit from this page? (the swap page's xinSender, for a sender whose address
+ *  is the refund address by construction). EVM: any provider. Solana: a Wallet Standard wallet that signs and sends. */
+export function canSend(s, chain) {
+  if (!s) return false;
+  return EVM_CHAINS.has(chain) ? !!s.evm : chain === "sol" && !!(s.std && s.std.features && s.std.features["solana:signAndSendTransaction"]);
+}
+/** Sends the live quote's deposit from the connected wallet: refuses a live quote older than 60 s (err.stale), then
+ *  evmSend or solSend with the quote's own deposit address and amount. Returns the transaction id. */
+export async function sendDeposit(s, t, live, { api, say = () => {}, now = Date.now() } = {}) {
+  if (liveStale(live, now)) throw Object.assign(new Error("That quote is more than 60 seconds old, so it was not sent from the wallet."), { stale: true });
+  if (!canSend(s, t.chain)) throw Object.assign(new Error(`${s ? s.name : "This wallet"} can't send from this page.`), { manual: true });
+  const q = live.resp.quote, dep = String(q.depositAddress), amount = BigInt(q.amountIn);
+  if (!addressOk(t.chain, dep)) throw new Error("Unexpected deposit address, so nothing was sent.");
+  return s.evm ? evmSend(s.evm, t, dep, amount, say) : solSend(s, t, dep, amount, api);
+}
+
+/* ----- wallet discovery: EIP-6963 and Wallet Standard, plus the older injected objects ----- */
+const W_ICON = { metamask: "/assets/xc/w-metamask.svg", rabby: "/assets/xc/w-rabby.svg", phantom: "/assets/xc/w-phantom.svg", solflare: "/assets/xc/w-solflare.svg", okx: "/assets/xc/w-okx.svg" };
+export function walletIcon(s) {
+  s = String(s || "");
+  return s.length < 200000 && (/^data:image\/(svg\+xml|png|jpe?g|webp|gif)[;,]/i.test(s) || /^https:\/\//.test(s)) ? s : "";
+}
+/** Listens for wallets announcing themselves in `win`. Returns { evm: [], std: [] }, filled as they announce. */
+export function xwInit(win, onChange = () => {}) {
+  const XW = { evm: [], std: [] };
+  win.addEventListener("eip6963:announceProvider", (e) => {
+    const d = e && e.detail;
+    if (!d || !d.info || !d.provider || typeof d.provider.request !== "function") return;
+    const uuid = String(d.info.uuid || d.info.rdns || d.info.name || "");
+    if (XW.evm.some((x) => x.uuid === uuid || (d.info.rdns && x.rdns === d.info.rdns))) return;
+    XW.evm.push({ uuid, rdns: String(d.info.rdns || ""), name: String(d.info.name || "Wallet").slice(0, 24), icon: walletIcon(d.info.icon), provider: d.provider });
+    onChange();
+  });
+  try { win.dispatchEvent(new Event("eip6963:requestProvider")); } catch (e) {}
+  const api = { register: (...ws) => { for (const w of ws) if (w && w.features && w.features["standard:connect"] && Array.isArray(w.chains) && !XW.std.includes(w)) XW.std.push(w); onChange(); return () => {}; } };
+  win.addEventListener("wallet-standard:register-wallet", (e) => { try { e.detail(api); } catch (x) {} });
+  try { win.dispatchEvent(new CustomEvent("wallet-standard:app-ready", { detail: api })); } catch (e) {}
+  return XW;
+}
+const evmAddress = async (p) => { const a = await p.request({ method: "eth_requestAccounts" }); return Array.isArray(a) && a[0] ? String(a[0]) : ""; };
+async function stdAddress(w, tag) {
+  const r = await w.features["standard:connect"].connect();
+  const accs = (r && r.accounts) || w.accounts || [];
+  const a = accs.find((x) => !Array.isArray(x.chains) || !x.chains.length || x.chains.some((c) => String(c).startsWith(tag))) || accs[0];
+  return a && a.address ? String(a.address) : "";
+}
+const pubkey = (o) => (o && o.publicKey ? String(o.publicKey.toString()) : "");
+async function tronAddress(link, win) {
+  const r = await link.request({ method: "tron_requestAccounts" });
+  if (r && r.code && r.code !== 200) throw Object.assign(new Error("cancelled"), { code: 4001 });
+  const tw = link.tronWeb || win.tronWeb;
+  return (tw && tw.defaultAddress && tw.defaultAddress.base58) || "";
+}
+/** The wallets found in `win` that hold an address on `chain`: [{ name, icon, get(), evm?, std? }]. evm / std mark the
+ *  ones that can also SEND the deposit from this page (an EVM provider, a Wallet Standard Solana wallet). */
+export function walletsFor(chain, XW, win) {
+  const out = [], w = win || {};
+  XW = XW || { evm: [], std: [] };
+  const add = (name, icon, get, extra = {}) => { if (!out.some((o) => o.name.toLowerCase() === name.toLowerCase())) out.push({ name, icon, get, ...extra }); };
+  if (EVM_CHAINS.has(chain)) {
+    for (const x of XW.evm) add(x.name, x.icon, () => evmAddress(x.provider), { evm: x.provider });
+    if (!XW.evm.length && w.ethereum && typeof w.ethereum.request === "function")
+      add(w.ethereum.isRabby ? "Rabby" : w.ethereum.isMetaMask ? "MetaMask" : "Browser wallet", w.ethereum.isRabby ? W_ICON.rabby : w.ethereum.isMetaMask ? W_ICON.metamask : "", () => evmAddress(w.ethereum), { evm: w.ethereum });
+  }
+  if (chain === "sol" || chain === "btc") {
+    const tag = chain === "sol" ? "solana:" : "bitcoin:";
+    for (const x of XW.std) if (x.chains.some((c) => String(c).startsWith(tag))) add(String(x.name || "Wallet").slice(0, 24), walletIcon(x.icon), () => stdAddress(x, tag), chain === "sol" ? { std: x } : {});
+  }
+  if (chain === "sol") {
+    if (w.phantom && w.phantom.solana && w.phantom.solana.connect) add("Phantom", W_ICON.phantom, async () => pubkey(await w.phantom.solana.connect()) || pubkey(w.phantom.solana));
+    if (w.solflare && w.solflare.connect) add("Solflare", W_ICON.solflare, async () => { await w.solflare.connect(); return pubkey(w.solflare); });
+    if (w.okxwallet && w.okxwallet.solana && w.okxwallet.solana.connect) add("OKX Wallet", W_ICON.okx, async () => pubkey(await w.okxwallet.solana.connect()) || pubkey(w.okxwallet.solana));
+  }
+  if (chain === "btc") {
+    const pick = (accs) => { const l = Array.isArray(accs) ? accs : []; const a = l.find((x) => x && x.purpose === "payment") || l[0]; return a ? String(a.address || a) : ""; };
+    if (w.phantom && w.phantom.bitcoin && w.phantom.bitcoin.requestAccounts) add("Phantom", W_ICON.phantom, async () => pick(await w.phantom.bitcoin.requestAccounts()));
+    if (w.unisat && w.unisat.requestAccounts) add("UniSat", "", async () => pick(await w.unisat.requestAccounts()));
+    if (w.okxwallet && w.okxwallet.bitcoin && w.okxwallet.bitcoin.connect) add("OKX Wallet", W_ICON.okx, async () => { const r = await w.okxwallet.bitcoin.connect(); return String((r && r.address) || ""); });
+  }
+  if (chain === "tron") {
+    if (w.tronLink && w.tronLink.request) add("TronLink", "", () => tronAddress(w.tronLink, w));
+    if (w.okxwallet && w.okxwallet.tronLink && w.okxwallet.tronLink.request) add("OKX Wallet", W_ICON.okx, () => tronAddress(w.okxwallet.tronLink, w));
+  }
+  return out;
+}
+/** Connects a wallet from walletsFor and reads its address on `chain`: the sender, whose address is the refund address. */
+export async function connectWallet(wl, chain) {
+  const address = String((await wl.get()) || "").trim();
+  if (!addressOk(chain, address)) throw new Error(`${wl.name} gave no ${CHAIN_NAMES[chain]} address. Pick another wallet, or pay by hand.`);
+  return { name: wl.name, address, evm: wl.evm || null, std: wl.std || null };
+}
 
 /* ======================================================================= the page */
 
@@ -344,6 +625,11 @@ function boot() {
   let wallet = null;            // { kit, selector, modal, account }
   let nearLive = null;          // { at, resp, txs, row } a NEAR-side live quote waiting for Send
   let busy = false;
+  let XW = { evm: [], std: [] }; // wallets on other chains that announced themselves (EIP-6963, Wallet Standard)
+  let sender = null;            // { name, address, evm, std } the wallet paying this deposit; its address is the refund address
+  let liveW = null;             // { at, resp, row } the live quote a wallet sends
+  let byHand = false;           // "Pay by hand instead" was pressed for the picked coin
+  let sendUi = null;            // { text, kind, retry } the wallet line on the deposit card
 
   pruneTracks(store);
 
@@ -362,6 +648,7 @@ function boot() {
   $("invChain").textContent = "on " + CHAIN_NAMES[inv.asset.chain];
   if (inv.label) { $("invLabel").textContent = inv.label; $("invLabel").hidden = false; }
   paintMode();
+  XW = xwInit(window, () => { if (selected && !track) renderNext(); });
 
   // The opener's origin: shown in full only when the browser itself vouches for it, by a reply from the opener
   // (checkout.js answers "hello") or by the referrer. The link's ref alone could say anything.
@@ -474,8 +761,7 @@ function boot() {
     r.state = "loading"; r.why = "";
     if (mode === "exact") {
       try {
-        const resp = await api({ action: "checkout", dry: true, originAsset: r.assetId, destinationAsset: inv.asset.assetId, amount: inv.amountRaw,
-          recipient: inv.to, refundTo: DRY_REFUND[r.chain], ...(inv.label ? { label: inv.label } : {}) });
+        const resp = await api(checkoutBody(r, inv, DRY_REFUND[r.chain], true));
         const q = resp && resp.quote;
         if (!q || !/^\d+$/.test(String(q.amountIn || ""))) throw new Error("No quote right now.");
         r.quoteIn = String(q.amountIn); r.timeEstimate = Number(q.timeEstimate) || 0; r.state = "ok";
@@ -514,6 +800,8 @@ function boot() {
     if (r.state === "none" || track) return;
     selected = r;
     nearLive = null;
+    byHand = false;
+    setMsg("walletMsg", "");
     for (const b of document.querySelectorAll("#coins .row")) b.setAttribute("aria-pressed", String(b.dataset.asset === r.assetId));
     renderNext();
     const next = $("next");
@@ -526,7 +814,19 @@ function boot() {
     $("nextTitle").textContent = `Pay with ${r.symbol} on ${r.chainName}`;
     $("nextQuote").textContent = r.state === "ok" ? `Send ${mode === "about" ? "about " : ""}${fmtAmount(r.quoteIn, r.decimals, 8)} ${r.symbol} (${r.chainName}). ${mode === "about" ? "An estimate: the merchant would receive about the invoiced amount." : "The final amount is fixed when you get the address."}` : r.why || "";
     const isNear = r.chain === "near";
-    $("refundBox").hidden = isNear;
+    // A wallet in this browser on a chain it can send from: "Pay with <wallet>" buttons, and "Pay by hand instead".
+    const canWallet = WALLET_CHAINS.has(r.chain) && mode === "exact";
+    const found = canWallet ? walletsFor(r.chain, XW, window) : [];
+    const showWallets = found.length > 0 && !byHand;
+    $("walletBox").hidden = !showWallets;
+    if (showWallets) renderWallets(found);
+    $("noWallet").hidden = !canWallet || found.length > 0;
+    $("noWallet").textContent = `No ${r.chainName} wallet found in this browser; send from any wallet by hand.`;
+    $("walletAgain").hidden = !(found.length > 0 && byHand);
+    // Bitcoin and Tron: a wallet here may fill the refund address (as on the swap page); the deposit is sent by hand.
+    const fill = r.chain === "btc" || r.chain === "tron" ? walletsFor(r.chain, XW, window) : [];
+    renderFill(fill);
+    $("refundBox").hidden = isNear || showWallets;
     $("nearBox").hidden = !isNear;
     $("refundLbl").textContent = `Your ${r.chainName} address for refunds`;
     $("refundIn").placeholder = r.chainName + " address";
@@ -551,8 +851,7 @@ function boot() {
 
   /** A live quote from the proxy, its fit with what was asked, and 1Click's own word on the deposit address. */
   async function liveQuote(r, refundTo) {
-    const resp = await api({ action: "checkout", dry: false, originAsset: r.assetId, destinationAsset: inv.asset.assetId, amount: inv.amountRaw,
-      recipient: inv.to, refundTo, ...(inv.label ? { label: inv.label } : {}) });
+    const resp = await api(checkoutBody(r, inv, refundTo, false));
     const why = checkLiveQuote(resp, { amountRaw: inv.amountRaw, originChain: r.chain });
     if (why) throw new Error(`The quote came back with ${why}, so it was not used. Try again.`);
     const q = resp.quote;
@@ -592,6 +891,124 @@ function boot() {
       else setMsg("nextMsg", quoteWhy(e.message), "error");
     } finally { busy = false; $("getBtn").textContent = "Get the address"; if (!track) renderNext(); }
   }
+
+  /* ----- paying from a wallet in this browser (Ethereum, Base, Arbitrum, Solana) ----- */
+  function walletIconEl(wl) {
+    const ic = el("span", "ico");
+    if (wl.icon) {
+      const img = document.createElement("img");
+      img.alt = ""; img.width = 28; img.height = 28; img.decoding = "async"; img.src = wl.icon;
+      img.addEventListener("error", () => { img.remove(); ic.textContent = wl.name.slice(0, 1); });
+      ic.appendChild(img);
+    } else ic.textContent = wl.name.slice(0, 1);
+    return ic;
+  }
+  function renderWallets(list) {
+    const box = $("wallets");
+    box.textContent = "";
+    for (const wl of list) {
+      const b = el("button", "wbtn");
+      b.type = "button";
+      b.disabled = busy || selected.state !== "ok";
+      b.append(walletIconEl(wl), el("span", null, "Pay with " + wl.name));
+      b.addEventListener("click", () => walletPick(wl));
+      box.appendChild(b);
+    }
+  }
+  function renderFill(list) {
+    const row = $("fillRow");
+    row.textContent = "";
+    row.hidden = !list.length;
+    if (!list.length) return;
+    row.appendChild(el("span", "sub", "Fill from"));
+    for (const wl of list) {
+      const b = el("button", "chip");
+      b.type = "button";
+      b.append(walletIconEl(wl), el("span", null, wl.name));
+      b.addEventListener("click", async () => {
+        const r = selected;
+        try {
+          const a = String((await wl.get()) || "").trim();
+          if (selected !== r) return;
+          if (!addressOk(r.chain, a)) { $("refundErr").textContent = `${wl.name} gave no ${r.chainName} address. Paste one instead.`; return; }
+          $("refundIn").value = a; checkRefund(true);
+          $("refundErr").textContent = `Filled from ${wl.name}. Refunds go there.`;
+        } catch (e) { $("refundErr").textContent = isCancel(e) ? `You cancelled in ${wl.name}.` : `${wl.name} didn't answer. Paste your address instead.`; }
+      });
+      row.appendChild(b);
+    }
+  }
+  $("byHand").addEventListener("click", () => { byHand = true; setMsg("walletMsg", ""); renderNext(); $("refundIn").focus(); });
+  $("walletAgain").addEventListener("click", () => { byHand = false; renderNext(); });
+
+  /** A wallet button: connect, take its address as the refund address, ask the live quote, draw the deposit card
+   *  (the fallback: amount, address, QR), then send at once. `submit` is not called: 1Click watches the address. */
+  async function walletPick(wl) {
+    const r = selected;
+    if (!r || busy || track || mode !== "exact" || r.state !== "ok") return;
+    busy = true; renderNext();
+    setMsg("walletMsg", `Connect ${wl.name}…`);
+    try {
+      const s = await connectWallet(wl, r.chain);
+      setMsg("walletMsg", `Refunds go to ${s.address}. Asking NEAR Intents for the deposit address…`);
+      const resp = await liveQuote(r, s.address);
+      sender = s;
+      liveW = { at: Date.now(), resp, row: r };
+      startTrack(newTrack(r, resp, { refundTo: s.address, via: s.name }));
+      setMsg("walletMsg", "");
+      busy = false;
+      await walletSend();
+    } catch (e) {
+      if (isMissingAction(e.status, e.message)) { switchToAbout(); setMsg("walletMsg", "Exact-amount checkout is not open on this site yet. The list shows estimates.", "warn"); }
+      else if (isCancel(e)) setMsg("walletMsg", `You cancelled in ${wl.name}, so nothing was sent.`, "warn");
+      else setMsg("walletMsg", quoteWhy(e.message), "error");
+    } finally { busy = false; if (!track) renderNext(); }
+  }
+  function paintSend(text, kind, retry) {
+    sendUi = text ? { text, kind: kind || "", retry: !!retry } : null;
+    if (track) renderTrack();
+  }
+  let sending = false;
+  /** Sends the deposit of the current track from the connected wallet (first try, or Try again to the SAME address). */
+  async function walletSend() {
+    const t = track, live = liveW, s = sender;
+    if (!t || !s || !live || sending || String(live.resp.quote.depositAddress) !== t.dep || t.txHash || trackView(t).step >= 2) return;
+    if (!canSend(s, t.pay.chain)) { paintSend(`${s.name} can't send from this page. Send the amount above to this address from it by hand, or scan the QR code.`, ""); return; }
+    sending = true;
+    paintSend(`Confirm in ${s.name}…`, "");
+    try {
+      const hash = await sendDeposit(s, t.pay, live, { api, say: (m) => paintSend(m, "") });
+      if (!track || track.dep !== t.dep) return;   // the poll replaces the track object; the deposit address is what counts
+      liveW = null;                                    // sent: this live quote is not sent again
+      track = { ...track, status: isFinal(track.status) || trackView(track).step >= 2 ? track.status : "KNOWN_DEPOSIT_TX", seenAt: track.seenAt || Date.now(), txHash: hash, sentFrom: s.address, via: s.name };
+      saveTrack(store, track);
+      paintSend("");
+    } catch (e) {
+      if (!track || track.dep !== t.dep) return;
+      if (e && e.stale) paintSend(`That quote is more than 60 seconds old, so it was not sent from ${s.name}. Press Try again for a fresh quote, or send by hand to the address below before the deadline.`, "warn", true);
+      else if (isCancel(e)) paintSend(`You cancelled in ${s.name}, so nothing was sent. Send by hand, or try the wallet again.`, "warn", true);
+      else paintSend(`${String((e && e.message) || "Something went wrong.").slice(0, 220)} Send by hand, or try the wallet again.`, "error", true);
+    } finally { sending = false; }
+  }
+  /** Try again: the same deposit address while its live quote is under 60 s old, else a fresh live quote first. */
+  $("retryBtn").addEventListener("click", async () => {
+    const t = track, s = sender;
+    if (!t || !s || sending || busy || t.txHash || trackView(t).step >= 2 || trackView(t).expired) return;
+    if (liveW && !liveStale(liveW)) return walletSend();
+    const r = liveW ? liveW.row : selected;
+    if (!r) return;
+    busy = true;
+    paintSend("That quote is more than 60 seconds old, so it is not sent from the wallet. Asking NEAR Intents for a fresh one…", "");
+    try {
+      const resp = await liveQuote(r, s.address);
+      liveW = { at: Date.now(), resp, row: r };
+      sendUi = null;
+      startTrack(newTrack(r, resp, { refundTo: s.address, via: s.name }));
+      busy = false;
+      await walletSend();
+    } catch (e) { paintSend(quoteWhy(e.message) + " Send by hand to the address below, or try again.", "error", true); }
+    finally { busy = false; }
+  });
 
   /* ----- paying from NEAR: the shared wallet selector, one transaction, as the bridge does ----- */
   function paintNearBox() {
@@ -714,6 +1131,8 @@ function boot() {
     saveTrack(store, track);
     try { const u = new URL(location.href); u.searchParams.set("dep", t.dep); history.replaceState(null, "", u.pathname + u.search + u.hash); } catch (e) {}
     $("payWith").hidden = true; $("next").hidden = true;
+    delete $("deposit").dataset.qr;                 // a fresh deposit address gets its own QR code
+    $("qr").textContent = "";
     renderTrack();
     poll();
     clearInterval(tickTimer);
@@ -728,21 +1147,27 @@ function boot() {
       $("sendAmt").textContent = fromRaw(p.amountInRaw, p.decimals) + " " + p.symbol;
       $("sendChain").textContent = "on " + p.chainName + (p.chain === "near" ? "" : ", in one transfer");
       $("depAddr").textContent = t.dep;
-      const changed = t.dryInRaw && t.dryInRaw !== p.amountInRaw;
+      const changed = t.dryInRaw && t.dryInRaw !== p.amountInRaw && !t.sentFrom;   // once sent from a wallet, it sent the new amount
       $("changed").hidden = !changed;
       if (changed) $("changed").textContent = `The amount changed since the first quote: ${fromRaw(t.dryInRaw, p.decimals)} then, ${fromRaw(p.amountInRaw, p.decimals)} ${p.symbol} now. Send the amount above.`;
-      const sentNear = !!t.sentFrom;
-      $("qrBox").hidden = sentNear;
-      $("sentLine").hidden = !sentNear;
-      if (sentNear) {
+      const sent = !!t.sentFrom;
+      $("qrBox").hidden = sent;
+      $("sentLine").hidden = !sent;
+      if (sent) {
         $("sentLine").textContent = "";
-        $("sentLine").appendChild(document.createTextNode(`Sent from ${t.sentFrom}`));
-        if (t.txHash) { $("sentLine").appendChild(document.createTextNode(" in ")); const a = el("a", "mono", t.txHash.slice(0, 10) + "…"); a.href = "https://nearblocks.io/txns/" + encodeURIComponent(t.txHash); a.target = "_blank"; a.rel = "noopener"; $("sentLine").appendChild(a); }
+        $("sentLine").appendChild(document.createTextNode(`Sent from ${t.via ? t.via + " (" + t.sentFrom + ")" : t.sentFrom}`));
+        const url = txUrl(p.chain, t.txHash);
+        if (url) { $("sentLine").appendChild(document.createTextNode(" in ")); const a = el("a", "mono", t.txHash.slice(0, 10) + "…"); a.href = url; a.target = "_blank"; a.rel = "noopener"; $("sentLine").appendChild(a); }
         $("sentLine").appendChild(document.createTextNode("."));
       }
-      if (!sentNear && !dc.dataset.qr) drawQr(p, t);
+      if (!sent && !dc.dataset.qr) drawQr(p, t);
+      // The wallet line: "Confirm in Phantom…", or why nothing was sent, with Try again (the same deposit address).
+      const ws = sendUi && !sent && v.step < 2 ? sendUi : null;
+      $("walletSend").hidden = !ws;
+      if (ws) setMsg("sendMsg", ws.text, ws.kind);
+      $("retryBtn").hidden = !(ws && ws.retry) || v.expired;
       const link = deepLink(p, t.dep, p.amountInRaw);
-      $("openWallet").hidden = sentNear || !link;
+      $("openWallet").hidden = sent || !link;
       if (link) $("openWallet").href = link;
       if (t.refundTo) $("refundShown").textContent = "Refunds go to " + t.refundTo;
     } else {
@@ -770,6 +1195,9 @@ function boot() {
     $("payoutLink").hidden = !outs.length;
     if (outs.length) $("payoutLink").href = outs[0].explorerUrl;
     $("statusLink").href = API + "?status=" + encodeURIComponent(t.dep);
+    const depTx = t.txHash && p ? txUrl(p.chain, t.txHash) : "";
+    $("depTxLink").hidden = !depTx;
+    if (depTx) { $("depTxLink").href = depTx; $("depTxLink").textContent = "Your deposit " + t.txHash.slice(0, 10) + "…"; }
     if (v.phase === "incomplete") setMsg("trackMsg", "1Click saw less than the amount. Send the rest to the same address before the deadline, or the deposit is refunded.", "warn");
     else if (v.phase === "refunded") setMsg("trackMsg", `Refunded${t.refunded ? ": " + t.refunded + " " + (p ? p.symbol : "") : ""}${t.refundReason ? " (" + t.refundReason + ")" : ""}. The coins went back to ${t.refundTo || "your refund address"}.`, "error");
     else if (v.phase === "failed") setMsg("trackMsg", "The payment failed. 1Click refunds the deposit to your refund address.", "error");
@@ -786,7 +1214,7 @@ function boot() {
     const s = v.secondsLeft;
     cd.textContent = `Send within ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
     $("expired").hidden = !v.expired;
-    if (v.expired) { $("qrBox").hidden = true; $("openWallet").hidden = true; }
+    if (v.expired) { $("qrBox").hidden = true; $("openWallet").hidden = true; $("retryBtn").hidden = true; }
     if (track.seenAt && v.late !== !$("late").hidden) $("late").hidden = !v.late;
   }
   async function drawQr(p, t) {

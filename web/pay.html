@@ -48,13 +48,22 @@
     <section class="card" id="next" hidden aria-labelledby="nextTitle">
       <h2 id="nextTitle"></h2>
       <p class="quote-line mono" id="nextQuote"></p>
+      <div id="walletBox" hidden>
+        <p class="sub">Pay from a wallet in this browser: it fills your refund address and sends the exact amount after one confirmation.</p>
+        <div class="wallets" id="wallets"></div>
+        <button type="button" class="linkish" id="byHand">Pay by hand instead</button>
+        <p class="msg" id="walletMsg" role="status" hidden></p>
+      </div>
+      <p class="sub" id="noWallet" hidden></p>
       <div id="refundBox">
+        <div class="fill" id="fillRow" hidden></div>
         <label for="refundIn" id="refundLbl" class="lbl"></label>
         <input id="refundIn" class="mono field" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" aria-describedby="refundWhy refundErr">
         <p class="sub" id="refundWhy">If the payment can't be completed before its deadline, 1Click sends your coins back to this address. Use one you control on the same chain.</p>
         <p class="field-err" id="refundErr" aria-live="polite"></p>
         <button type="button" class="btn primary" id="getBtn">Get the address</button>
         <p class="msg" id="nextMsg" role="status" hidden></p>
+        <button type="button" class="linkish" id="walletAgain" hidden>Pay from a wallet instead</button>
       </div>
       <div id="nearBox" hidden>
         <p class="sub">You send one transaction from your NEAR wallet. A refund, if any, goes back to the same account.</p>
@@ -67,6 +76,10 @@
 
     <section class="card" id="deposit" hidden aria-labelledby="depTitle">
       <h2 id="depTitle">Send exactly</h2>
+      <div id="walletSend" class="wsend" hidden>
+        <p class="msg" id="sendMsg" role="status" hidden></p>
+        <button type="button" class="btn primary" id="retryBtn" hidden>Try again</button>
+      </div>
       <div class="send-row"><span id="sendAmt" class="mono big"></span><button type="button" class="copy" data-copy="sendAmt">Copy</button></div>
       <p class="sub" id="sendChain"></p>
       <p class="changed" id="changed" role="alert" hidden></p>
@@ -91,7 +104,7 @@
       <p class="sub" id="estimate"></p>
       <p class="late" id="late" hidden>Taking longer than estimated. 1Click is still working on it; this page keeps checking.</p>
       <p class="msg" id="trackMsg" role="status" hidden></p>
-      <p class="links"><a id="payoutLink" href="#" target="_blank" rel="noopener" hidden>Payout transaction</a> <a id="statusLink" href="#" target="_blank" rel="noopener">Status from 1Click</a></p>
+      <p class="links"><a id="depTxLink" class="mono" href="#" target="_blank" rel="noopener" hidden>Your deposit</a> <a id="payoutLink" href="#" target="_blank" rel="noopener" hidden>Payout transaction</a> <a id="statusLink" href="#" target="_blank" rel="noopener">Status from 1Click</a></p>
     </section>
 
     <section class="card rc" id="receipt" hidden aria-labelledby="rcTitle">

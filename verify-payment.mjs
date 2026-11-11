@@ -158,9 +158,13 @@ export async function run(args, { fetchImpl = globalThis.fetch, timeoutMs = 1500
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2));
-  if (args.help) { console.log(USAGE); process.exit(0); }
-  if (args.error) { console.error("verify-payment: " + args.error + "\n" + USAGE); process.exit(1); }
-  const r = await run(args);
-  console.log(r.lines.join("\n"));
-  process.exit(r.paid ? 0 : 1);
+  // process.exitCode, not process.exit(): on Windows (Node 24) exiting while the TLS socket of the status call is
+  // still closing trips a libuv assertion (exit code 127 instead of 0). Node exits by itself once the socket is gone.
+  if (args.help) { console.log(USAGE); process.exitCode = 0; }
+  else if (args.error) { console.error("verify-payment: " + args.error + "\n" + USAGE); process.exitCode = 1; }
+  else {
+    const r = await run(args);
+    console.log(r.lines.join("\n"));
+    process.exitCode = r.paid ? 0 : 1;
+  }
 }

@@ -96,6 +96,43 @@ for (const size of SIZES) {
       await expect(page.locator("#refundBox")).toBeHidden();
       await expect(page.locator("#nearBtn")).toHaveText("Connect wallet");
     });
+
+    test("wallet row: Pay with Phantom sends at once; MetaMask cancel keeps the card with Try again; no wallet says so", async ({ page }) => {
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
+      let approve = true;
+      page.on("dialog", (d) => (approve || !/send this transaction/.test(d.message()) ? d.accept() : d.dismiss()));
+      // No wallet in the browser: today's flow plus one line.
+      await page.goto(srv.payOrigin + "/pay?to=shop.near&amount=1&asset=usdc");
+      await page.locator('[data-asset="nep141:sol.omft.near"]').click();
+      await expect(page.locator("#noWallet")).toHaveText("No Solana wallet found in this browser; send from any wallet by hand.");
+      await expect(page.locator("#refundBox")).toBeVisible();
+      // Mocked Phantom: one click, the deposit is sent, the status starts at Deposit seen with a Solscan link.
+      await page.goto(srv.payOrigin + "/pay?to=shop.near&amount=1&asset=usdc&wallets=mock");
+      await page.locator('[data-asset="nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near"]').click();
+      await expect(page.locator("#refundBox")).toBeHidden();
+      await page.locator("#wallets .wbtn", { hasText: "Pay with Phantom" }).click();
+      await expect(page.locator("#steps li.now")).toHaveText("Deposit seen");
+      await expect(page.locator("#depTxLink")).toHaveAttribute("href", /^https:\/\/solscan\.io\/tx\//);
+      await expect(page.locator("#refundShown")).toContainText("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM");
+      // Mocked MetaMask, cancelled: the card stays with the address and Try again to the same address.
+      approve = false;
+      await page.goto(srv.payOrigin + "/pay?to=shop.near&amount=1&asset=usdc&wallets=mock");
+      await page.locator('[data-asset="nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near"]').click();
+      await page.locator("#byHand").click();
+      await expect(page.locator("#refundBox")).toBeVisible();
+      await page.locator("#walletAgain").click();
+      await page.locator("#wallets .wbtn", { hasText: "Pay with MetaMask" }).click();
+      await expect(page.locator("#sendMsg")).toContainText("You cancelled in MetaMask, so nothing was sent");
+      const dep = await page.locator("#depAddr").textContent();
+      approve = true;
+      await page.locator("#retryBtn").click();
+      await expect(page.locator("#depTxLink")).toHaveAttribute("href", /^https:\/\/basescan\.org\/tx\/0x[0-9a-f]{64}$/);
+      await expect(page.locator("#depAddr")).toHaveText(dep);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
+      expect(errors).toEqual([]);
+    });
   });
 }
 

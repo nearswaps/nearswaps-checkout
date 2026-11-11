@@ -83,6 +83,21 @@ li.row.skel{display:block;}
 .btn.secondary:hover{border-color:var(--ns-ink);}
 .btn:active:not(:disabled){transform:scale(0.98);}
 .btn:disabled{opacity:0.5;cursor:not-allowed;}
+/* wallets in this browser */
+.wallets{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+.wbtn{width:100%;min-height:52px;display:flex;align-items:center;gap:12px;padding:8px 14px;border:1px solid var(--ns-line-strong);border-radius:var(--ns-r-sm);background:var(--ns-raise);color:var(--ns-ink);font:700 var(--ns-fs-md)/1.2 var(--ns-font);text-align:left;cursor:pointer;transition:border-color var(--ns-t-touch) var(--ns-ease),transform var(--ns-t-touch) var(--ns-ease);}
+.wbtn:hover:not(:disabled){border-color:var(--ns-mint);}
+.wbtn:active:not(:disabled){transform:scale(0.98);}
+.wbtn:disabled{opacity:0.5;cursor:not-allowed;}
+.linkish{display:inline-flex;align-items:center;min-height:var(--ns-touch);margin-top:6px;padding:0;border:0;background:none;color:var(--ns-mint);font:600 var(--ns-fs-sm)/1.2 var(--ns-font);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
+.fill{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;}
+.fill .sub{margin:0;}
+.chip{display:inline-flex;align-items:center;gap:8px;min-height:var(--ns-touch);padding:0 12px 0 6px;border:1px solid var(--ns-line-strong);border-radius:var(--ns-r-pill);background:transparent;color:var(--ns-ink);font:600 var(--ns-fs-sm)/1 var(--ns-font);cursor:pointer;}
+.chip:hover{border-color:var(--ns-mint);}
+.chip .ico{width:24px;height:24px;}
+.chip .ico img{width:24px;height:24px;}
+.wsend{margin:4px 0 8px;}
+.wsend .msg{margin-top:4px;}
 .msg{margin:10px 0 0;font-size:var(--ns-fs-sm);color:var(--ns-body);word-break:break-word;}
 .msg.error{color:var(--ns-red);}
 .msg.warn{color:var(--ns-amber);}
@@ -141,7 +156,7 @@ li.row.skel{display:block;}
   .rc-list div{grid-template-columns:1fr;gap:2px;}
 }
 @media (prefers-reduced-motion:reduce){
-  .row,.btn{transition:none;}
-  .row:active:not(:disabled),.btn:active:not(:disabled){transform:none;}
+  .row,.btn,.wbtn{transition:none;}
+  .row:active:not(:disabled),.btn:active:not(:disabled),.wbtn:active:not(:disabled){transform:none;}
   .row.skel,.skel-line{animation:none;}
 }
