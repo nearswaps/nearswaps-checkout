@@ -245,3 +245,13 @@ test("quoteOrder: the likely picks are quoted first, the rest keep their list or
   assert.deepEqual(out, ["USDC/sol", "SOL/sol", "ETH/base", "ETH/eth", "NEAR/near", "BTC/btc", "ZEC/zec", "USDT/tron"]);
   assert.deepEqual(rows.map((r) => r.symbol + "/" + r.chain)[0], "BTC/btc", "the input is not reordered");
 });
+
+test("pollDelay: every 2 s for two minutes after a deposit sent from this page, else every 5 s", () => {
+  const now = 1_700_000_000_000;
+  assert.equal(P.pollDelay({ status: "KNOWN_DEPOSIT_TX", seenAt: now - 30e3, txHash: "abc" }, now), P.POLL_FAST_MS);
+  assert.equal(P.pollDelay({ status: "PROCESSING", seenAt: now - 119e3, txHash: "abc" }, now), P.POLL_FAST_MS);
+  assert.equal(P.pollDelay({ status: "PROCESSING", seenAt: now - 121e3, txHash: "abc" }, now), P.POLL_MS, "two minutes are up");
+  assert.equal(P.pollDelay({ status: "PENDING_DEPOSIT" }, now), P.POLL_MS, "paid by hand: no transaction known");
+  assert.equal(P.pollDelay({ status: "SUCCESS", seenAt: now - 10e3, txHash: "abc" }, now), P.POLL_MS, "final");
+  assert.equal(P.pollDelay(null, now), P.POLL_MS);
+});

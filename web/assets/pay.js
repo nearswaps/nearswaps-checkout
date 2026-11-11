@@ -20,6 +20,11 @@ export const ONECLICK = "https://1click.chaindefuser.com";
 // 1Click's own fee account: 1Click splits the site's app fee and adds its share under this account (bridge notes, 1 Nov 2026).
 export const ONECLICK_FEE_ACCOUNT = "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd";
 export const POLL_MS = 5000;
+export const POLL_FAST_MS = 2000;             // right after a deposit was sent from here: for two minutes, every 2 s
+/** How long to wait before the next status call: faster for two minutes after the deposit was sent from this page. */
+export function pollDelay(t, now = Date.now()) {
+  return t && t.seenAt && t.txHash && !isFinal(t.status) && now - t.seenAt < 120e3 ? POLL_FAST_MS : POLL_MS;
+}
 export const TRACK_PREFIX = "nearswaps-pay:";
 export const TRACK_TTL_MS = 24 * 3600e3;
 export const LIVE_MAX_AGE_MS = 60e3;          // a NEAR-side live quote is sent within 60 s or asked again (as the bridge)
@@ -1262,7 +1267,7 @@ function boot() {
         }
       }
     } catch (e) {}
-    if (track && trackView(track).poll) pollTimer = setTimeout(poll, POLL_MS);
+    if (track && trackView(track).poll) pollTimer = setTimeout(poll, pollDelay(track));
   }
 
   /* ----- the receipt ----- */
