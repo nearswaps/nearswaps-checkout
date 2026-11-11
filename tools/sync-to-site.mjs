@@ -1,7 +1,7 @@
 // Copies the pay page, the loader, the merchant docs and the demo shop into the nearswaps site folder, and adds the
-// /pay line to _redirects. It only ever writes these, and refuses anything else:
+// /pay and /demo-shop lines to _redirects. It only ever writes these, and refuses anything else:
 //   pay.html, assets/pay.js, assets/pay.css, the QR encoder with its licence, checkout.js,
-//   learn/accept-payments.html (from web/docs/), demo-shop.html and assets/demo-shop.js (from demo/), one line in _redirects.
+//   learn/accept-payments.html (from web/docs/), demo-shop.html and assets/demo-shop.js (from demo/), two lines in _redirects.
 //
 //   node tools/sync-to-site.mjs [--site <path to Nearswaps\site>] [--dry-run]
 //
@@ -12,11 +12,11 @@
 // (Nearswaps\tools\check-core.mjs fails on any extra file there, and the preview and publish scripts refuse to run),
 // so nothing from this repo ever lands in assets/vendor/. The synced pay.js has its one import("./vendor/qr.js")
 // rewritten to import("./pay-qr.js"); the copy in the repo is unchanged.
-// The docs page: pay.html links to /learn/accept-payments.html, and this script writes that page, so the link holds.
-// Note for the site: Nearswaps/tools/seo-build.mjs removes any learn/*.html it does not generate itself (removeStale),
-// and seo-check.mjs wants every learn page in sitemap.xml and the llms files. Until the page is an entry in
-// seo-content-learn.mjs, run seo-build before this sync, not after. Once the site makes the page itself (the file no
-// longer starts with this repo's source comment), this script leaves learn/accept-payments.html alone.
+// The docs page: pay.html links to /learn/accept-payments.html. Since 11 Nov 2026 the site makes that page itself
+// (an entry in Nearswaps/tools/seo-content-learn.mjs, rendered by seo-build.mjs, which also removes any learn/*.html it
+// did not generate), so this script leaves learn/accept-payments.html alone whenever the file there is not this repo's
+// copy (it no longer starts with this repo's source comment). web/docs/accept-payments.html stays the readable copy for
+// the README and the local server; a change to the guide goes into the site's content file first, then here.
 // The demo shop's script is a file because the site's Content-Security-Policy runs no inline script.
 import fs from "node:fs";
 import path from "node:path";
@@ -26,6 +26,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(here, "..");
 export const DEFAULT_SITE = "C:\\Users\\slpto\\OneDrive\\Desktop\\NEKO WEBSITE\\Nearswaps\\site";
 export const PAY_RULE = "/pay            /pay.html                  200";
+export const DEMO_RULE = "/demo-shop      /demo-shop.html            200";
 export const DOCS_SOURCE_MARK = "<!-- source: nearswaps-checkout web/docs/accept-payments.html";
 
 /** The files to write: [{ from (in this repo), to (in the site), transform?, onlyIfOurs? }]. */
@@ -50,17 +51,25 @@ function replaceOnce(s, a, b) {
   if (n !== 1) throw new Error(`expected exactly one ${a} (found ${n})`);
   return s.replace(a, b);
 }
-/** _redirects with the /pay rule after /bridge (or at the end), the /api/* proxy rule still first. */
+/** _redirects with the /pay rule after /bridge and the /demo-shop rule after /pay (or both at the end), each once,
+ * the /api/* proxy rule still first. */
 export function withPayRule(text) {
   const lines = text.split(/\r?\n/);
   const rules = lines.map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
   if (!rules.length || !/^\/api\/\*\s/.test(rules[0])) throw new Error("_redirects must start with the /api/* rule; not touching it");
-  if (rules.some((l) => /^\/pay\s/.test(l))) return text;
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
-  const at = lines.findIndex((l) => /^\/bridge\s/.test(l.trim()));
-  if (at >= 0) lines.splice(at + 1, 0, PAY_RULE);
-  else { while (lines.length && lines[lines.length - 1] === "") lines.pop(); lines.push(PAY_RULE, ""); }
-  return lines.join(eol);
+  let changed = false;
+  const add = (rule, after) => {
+    const from = rule.split(/\s+/)[0];
+    if (lines.some((l) => l.trim().startsWith(from + " ") || l.trim().startsWith(from + "\t"))) return;
+    const at = lines.findIndex((l) => after.test(l.trim()));
+    if (at >= 0) lines.splice(at + 1, 0, rule);
+    else { while (lines.length && lines[lines.length - 1] === "") lines.pop(); lines.push(rule, ""); }
+    changed = true;
+  };
+  add(PAY_RULE, /^\/bridge\s/);
+  add(DEMO_RULE, /^\/pay\s/);
+  return changed ? lines.join(eol) : text;
 }
 /** Text the site must never get from here. */
 export function problems(name, text) {

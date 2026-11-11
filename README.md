@@ -55,7 +55,7 @@ It prints one fact per line (status, kind, quote type, recipient, destination as
 `demo/shop.html` is a small shop with three products (1, 2 and 5 USDC) and the real tag, paying `tome.near`. When the pay page reports a payment, a "Paid" banner shows the deposit address, a link to its status call and the verifier command.
 
 - **Locally, nothing real:** `npm run serve`, then open http://127.0.0.1:8788/demo-shop. The local server serves the same file with its tags pointed at the local pay page and a mocked backend, so every quote, address and payment there is made up. Add `--site <path to the nearswaps site folder>` for the site's fonts and colours on the pay page and the docs page (http://127.0.0.1:8787/docs/accept-payments.html).
-- **On nearswaps.com:** the sync copies it to nearswaps.com/demo-shop.html. There the buttons pay `tome.near` for real, and the page says so. You can see the quote and the deposit address without sending anything.
+- **On nearswaps.com:** the sync copies it to nearswaps.com/demo-shop (also /demo-shop.html). There the buttons pay `tome.near` for real, and the page says so. You can see the quote and the deposit address without sending anything.
 
 Open it over http or https: a page opened from disk has no origin, so the pay page cannot send it the "paid" message.
 
@@ -80,12 +80,12 @@ No refunds beyond 1Click's own (a deposit that misses the deadline or can't be f
 | `web/pay.html`, `web/assets/pay.js`, `web/assets/pay.css` | the pay page served at nearswaps.com/pay |
 | `web/assets/vendor/qr.js` | the QR encoder: the MIT `qrcode` package's core and `dijkstrajs`, bundled unchanged by `tools/build-qr.mjs` (licences in `qr-LICENSE.txt`). **On nearswaps.com it is `/assets/pay-qr.js`** (with `pay-qr-LICENSE.txt`): the site's `assets/vendor/` folder holds only its own core files, so the sync copies the encoder under that name and points the synced `pay.js` at it |
 | `web/checkout.js` | the loader merchants add |
-| `web/docs/accept-payments.html` | the merchant docs page, in the nearswaps learn-page style. **On nearswaps.com it is `/learn/accept-payments.html`** |
+| `web/docs/accept-payments.html` | the merchant docs page, in the nearswaps learn-page style, as the README and the local server show it. **On nearswaps.com it is `/learn/accept-payments.html`**, which the site generates itself from its own content file (the sync never overwrites that copy) |
 | `demo/shop.html`, `demo/assets/demo-shop.js` | the demo shop: three products, the real tag, a "Paid" banner from the `nearswaps:paid` event. On nearswaps.com: `/demo-shop.html` and `/assets/demo-shop.js` (a file, because the site's Content-Security-Policy runs no inline script) |
 | `verify-payment.mjs` | the payment verifier: Node 18 or later, no packages, exit code 0 when paid |
 | `tests/fixtures/status/` | status answers for the verifier's tests (pending, success, refunded, wrong recipient, short amount), in the shape of the backend contract; not recorded from the live site |
 | `tools/serve-local.mjs` | a local copy with a mocked backend: `npm run serve`, then open http://127.0.0.1:8787/pay?to=shop.near&amount=25, the test shop at http://127.0.0.1:8788/ and the demo shop at http://127.0.0.1:8788/demo-shop |
-| `tools/sync-to-site.mjs` | copies into the nearswaps site folder: `pay.html`, `assets/pay.js`, `assets/pay.css`, `assets/pay-qr.js` (from `web/assets/vendor/qr.js`) and `assets/pay-qr-LICENSE.txt`, `checkout.js`, `learn/accept-payments.html` (from `web/docs/`), `demo-shop.html` and `assets/demo-shop.js` (from `demo/`), and the `/pay` line in `_redirects`; nothing else, never into `assets/vendor/`, and never an HTML file with an inline script |
+| `tools/sync-to-site.mjs` | copies into the nearswaps site folder: `pay.html`, `assets/pay.js`, `assets/pay.css`, `assets/pay-qr.js` (from `web/assets/vendor/qr.js`) and `assets/pay-qr-LICENSE.txt`, `checkout.js`, `learn/accept-payments.html` (from `web/docs/`), `demo-shop.html` and `assets/demo-shop.js` (from `demo/`), and the `/pay` and `/demo-shop` lines in `_redirects`; nothing else, never into `assets/vendor/`, and never an HTML file with an inline script |
 | `tests/` | `npm test` (Node, no packages); `tests/browser` (Playwright at 1440 and 390 px, against the mock) |
 
 The pay page uses nearswaps' shared files (brand tokens, fonts, coin icons, the NEAR wallet selector). Run the local copy with `--site <path to the nearswaps site folder>` to serve those too; without them the page still works with fallback colours.

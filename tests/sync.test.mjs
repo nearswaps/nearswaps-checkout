@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { sync, withPayRule, problems, PAY_RULE, ALLOWED } from "../tools/sync-to-site.mjs";
+import { sync, withPayRule, problems, PAY_RULE, DEMO_RULE, ALLOWED } from "../tools/sync-to-site.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1");
 const REDIRECTS = "# comment\n/api/*          https://nekoonnear.com/api/:splat   200\n\n/swap           /swap.html                 200\n/bridge         /bridge.html               200\n/points         /points.html               200\n";
@@ -34,6 +34,7 @@ test("writes exactly the allowed files and the /pay rule, QR outside the core ve
   assert.ok(fs.readFileSync(path.join(d, "demo-shop.html"), "utf8").includes('<script src="assets/demo-shop.js"></script>'), "the shop's script resolves next to it in the site");
   const red = fs.readFileSync(path.join(d, "_redirects"), "utf8").split("\n");
   assert.equal(red[red.indexOf("/bridge         /bridge.html               200") + 1], PAY_RULE);
+  assert.equal(red[red.indexOf("/bridge         /bridge.html               200") + 2], DEMO_RULE);
   const again = sync({ site: d, log: () => {} });
   assert.deepEqual(again.written, [], "a second run changes nothing");
 });
@@ -73,11 +74,18 @@ test("dry run writes nothing; a folder that is not the site is refused", () => {
   assert.throws(() => sync({ site: fs.mkdtempSync(path.join(os.tmpdir(), "ns-empty-")), log: () => {} }), /not a nearswaps site folder/);
 });
 
-test("the /pay rule: after /bridge, once, and never before the /api/* proxy rule", () => {
+test("the /pay and /demo-shop rules: after /bridge, once each, and never before the /api/* proxy rule", () => {
   const once = withPayRule(REDIRECTS);
   assert.equal(withPayRule(once), once);
   assert.ok(once.trim().split("\n").find((l) => !l.startsWith("#") && l.trim()).startsWith("/api/*"));
-  assert.ok(withPayRule("/api/*  x  200\n").includes(PAY_RULE), "appended when there is no /bridge line");
+  assert.equal(once.split(PAY_RULE).length - 1, 1);
+  assert.equal(once.split(DEMO_RULE).length - 1, 1);
+  const withPay = REDIRECTS + PAY_RULE + "\n";
+  const both = withPayRule(withPay);
+  assert.equal(both.split(PAY_RULE).length - 1, 1, "a /pay line already there is not repeated");
+  assert.equal(both.split("\n")[both.split("\n").indexOf(PAY_RULE) + 1], DEMO_RULE, "the /demo-shop line goes right after /pay");
+  const tail = withPayRule("/api/*  x  200\n");
+  assert.ok(tail.includes(PAY_RULE) && tail.includes(DEMO_RULE), "appended when there is no /bridge line");
   assert.throws(() => withPayRule("/swap /swap.html 200\n"), /must start with the \/api\/\* rule/);
   assert.ok(withPayRule(REDIRECTS.replace(/\n/g, "\r\n")).includes(PAY_RULE + "\r\n"), "keeps CRLF");
 });
