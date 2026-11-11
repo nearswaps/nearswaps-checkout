@@ -91,7 +91,7 @@ test("the /pay and /demo-shop rules: after /bridge, once each, and never before 
 });
 
 /* ---------- wording ---------- */
-const textFiles = (dir) => { const out = []; const walk = (p) => { for (const e of fs.readdirSync(p, { withFileTypes: true })) { const f = path.join(p, e.name); if (e.isDirectory()) { if (!["node_modules", ".git"].includes(e.name)) walk(f); } else if (/\.(html|js|mjs|css|md|txt|json)$/.test(e.name)) out.push(f); } }; walk(dir); return out; };
+const textFiles = (dir) => { const out = []; const walk = (p) => { for (const e of fs.readdirSync(p, { withFileTypes: true })) { const f = path.join(p, e.name); if (e.isDirectory()) { if (!["node_modules", ".git"].includes(e.name)) walk(f); } else if (/\.(html|js|mjs|css|md|txt|json|svg|py)$/.test(e.name)) out.push(f); } }; walk(dir); return out; };
 test("no em dashes and nothing NEKO anywhere in the repo's own files", () => {
   for (const f of textFiles(ROOT)) {
     if (f.endsWith("sync.test.mjs") || f.endsWith("sync-to-site.mjs") || f.endsWith("package-lock.json")) continue;
@@ -100,11 +100,13 @@ test("no em dashes and nothing NEKO anywhere in the repo's own files", () => {
     if (!/[\\/](tests|tools)[\\/]/.test(f)) assert.ok(!/neko/i.test(t), "NEKO in " + f);
   }
 });
-test("the pay page, the loader and the README avoid the words the brand rules out", () => {
-  const files = ["web/pay.html", "web/assets/pay.js", "web/checkout.js", "README.md", "web/docs/accept-payments.html", "demo/shop.html", "demo/assets/demo-shop.js", "verify-payment.mjs"].map((f) => path.join(ROOT, f));
+test("the pay page, the loader, the README and the other public docs avoid the words the brand rules out", () => {
+  const files = ["web/pay.html", "web/assets/pay.js", "web/checkout.js", "README.md", "web/docs/accept-payments.html", "demo/shop.html", "demo/assets/demo-shop.js", "verify-payment.mjs",
+    "SECURITY.md", "CONTRIBUTING.md", "docs/api.md", "docs/architecture.svg", "docs/build-hero.py", "docs/runs/01-first-payment-verify.txt"].map((f) => path.join(ROOT, f));
   for (const f of files) assert.ok(fs.existsSync(f), "missing " + f);
   for (const f of files) {
-    const t = fs.readFileSync(f, "utf8").replace(/https?:\/\/\S+/g, "");
+    // CONTRIBUTING.md names the refused words once, between its wording-rules markers; that block alone is skipped.
+    const t = fs.readFileSync(f, "utf8").replace(/<!-- wording-rules[\s\S]*?<!-- \/wording-rules -->/, "").replace(/https?:\/\/\S+/g, "");
     for (const w of ["safe", "secure", "verified", "audited", "guaranteed", "instant", "emoji"]) assert.ok(!new RegExp("\\b" + w + "\\b", "i").test(t), `"${w}" in ${f}`);
     assert.ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(t), "emoji in " + f);
   }

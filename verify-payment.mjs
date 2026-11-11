@@ -130,7 +130,7 @@ export function verify(s, invoice) {
   if (typeof sd.refundedAmountFormatted === "string" && sd.refundedAmountFormatted) lines.push(`info  refunded to the buyer: ${sd.refundedAmountFormatted}`);
   if (typeof sd.refundReason === "string" && sd.refundReason) lines.push(`info  refund reason: ${sd.refundReason}`);
   for (const t of Array.isArray(sd.destinationChainTxHashes) ? sd.destinationChainTxHashes : []) {
-    if (t && typeof t.hash === "string") lines.push(`info  payout transaction: ${t.hash}${typeof t.explorerUrl === "string" ? " " + t.explorerUrl : ""}`);
+    if (t && typeof t.hash === "string") lines.push(`info  payout transaction: ${t.hash}${typeof t.explorerUrl === "string" && t.explorerUrl ? " " + t.explorerUrl : ""}`);
   }
   if (typeof s.updatedAt === "string") lines.push(`info  updated: ${s.updatedAt}`);
   const paid = fails.length === 0;

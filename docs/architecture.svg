@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 700" width="800" height="700" role="img" aria-labelledby="t d">
+  <title id="t">nearswaps checkout architecture</title>
+  <desc id="d">The merchant page loads checkout.js, which opens the pay page at nearswaps.com/pay in a popup. The pay page asks nearswaps.com/api/intents for a checkout quote, which asks 1Click (NEAR Intents) for a one-time deposit address. The buyer's wallet sends the exact amount to that address with one confirmation, or the buyer sends by hand. 1Click delivers the invoiced amount to the merchant's account. The pay page tells the merchant page with a postMessage to its origin only, and the merchant's server checks the public status call before shipping.</desc>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9A9FA8"/>
+    </marker>
+    <marker id="am" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#01FAC0"/>
+    </marker>
+    <style>
+      .w { font-family: Manrope, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .m { font-family: "JetBrains Mono", ui-monospace, Consolas, Menlo, monospace; }
+    </style>
+  </defs>
+
+  <rect width="800" height="700" fill="#060708"/>
+
+  <!-- eyebrow -->
+  <text x="32" y="34" class="m" font-size="12" letter-spacing="1.2" fill="#01FAC0">ARCHITECTURE</text>
+
+  <!-- row 1, left: merchant page -->
+  <rect x="32" y="56" width="320" height="104" rx="16" fill="#0A0B0D" stroke="#2A2B2E"/>
+  <text x="52" y="80" class="m" font-size="12" letter-spacing="1.2" fill="#01FAC0">MERCHANT PAGE</text>
+  <text x="52" y="102" class="w" font-size="16" font-weight="800" fill="#F2F2F0">any page, one script tag</text>
+  <text x="52" y="124" class="m" font-size="12" fill="#9A9FA8">checkout.js: the Pay button, the</text>
+  <text x="52" y="141" class="m" font-size="12" fill="#9A9FA8">popup, the nearswaps:paid event</text>
+
+  <!-- row 1, right: merchant's server -->
+  <rect x="448" y="56" width="320" height="104" rx="16" fill="#0A0B0D" stroke="#2A2B2E"/>
+  <text x="468" y="80" class="m" font-size="12" letter-spacing="1.2" fill="#01FAC0">MERCHANT'S SERVER</text>
+  <text x="468" y="102" class="w" font-size="16" font-weight="800" fill="#F2F2F0">verify before you ship</text>
+  <text x="468" y="124" class="m" font-size="12" fill="#9A9FA8">verify-payment.mjs or one GET:</text>
+  <text x="468" y="141" class="m" font-size="12" fill="#9A9FA8">status, recipient, asset, amount</text>
+
+  <!-- page to pay page (open) and back (paid) -->
+  <line x1="64" y1="160" x2="64" y2="214" stroke="#9A9FA8" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text x="76" y="192" class="m" font-size="12" fill="#9A9FA8">a popup</text>
+  <line x1="320" y1="216" x2="320" y2="162" stroke="#9A9FA8" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#ar)"/>
+  <text x="308" y="185" class="m" font-size="12" fill="#9A9FA8" text-anchor="end">"paid", posted</text>
+  <text x="308" y="202" class="m" font-size="12" fill="#9A9FA8" text-anchor="end">to its origin only</text>
+
+  <!-- server to the status call -->
+  <line x1="608" y1="160" x2="608" y2="214" stroke="#9A9FA8" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#ar)"/>
+  <text x="620" y="192" class="m" font-size="12" fill="#9A9FA8">GET ?status=</text>
+
+  <!-- row 2, left: pay page -->
+  <rect x="32" y="216" width="320" height="120" rx="16" fill="#0A0B0D" stroke="#01FAC0" stroke-opacity="0.55"/>
+  <text x="52" y="240" class="m" font-size="12" letter-spacing="1.2" fill="#01FAC0">PAY PAGE (POPUP)</text>
+  <text x="52" y="262" class="m" font-size="16" font-weight="700" fill="#F2F2F0">nearswaps.com/pay</text>
+  <text x="52" y="284" class="m" font-size="12" fill="#9A9FA8">invoice, quotes in any coin,</text>
+  <text x="52" y="301" class="m" font-size="12" fill="#9A9FA8">wallet buttons, deposit card, QR,</text>
+  <text x="52" y="318" class="m" font-size="12" fill="#9A9FA8">the status every 5 s</text>
+
+  <!-- pay page to the API -->
+  <line x1="352" y1="276" x2="446" y2="276" stroke="#9A9FA8" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text x="400" y="268" class="m" font-size="12" fill="#9A9FA8" text-anchor="middle">checkout</text>
+
+  <!-- row 2, right: the API -->
+  <rect x="448" y="216" width="320" height="120" rx="16" fill="#0A0B0D" stroke="#2A2B2E"/>
+  <text x="468" y="240" class="m" font-size="12" letter-spacing="1.2" fill="#01FAC0">NEARSWAPS API</text>
+  <text x="468" y="262" class="m" font-size="16" font-weight="700" fill="#F2F2F0">/api/intents</text>
+  <text x="468" y="284" class="m" font-size="12" fill="#9A9FA8">checkout: EXACT_OUTPUT, 30 min,</text>
+  <text x="468" y="301" class="m" font-size="12" fill="#9A9FA8">the fee inside the quote; status;</text>
+  <text x="468" y="318" class="m" font-size="12" fill="#9A9FA8">soltx; per-address, hourly caps</text>
+
+  <!-- pay page to the wallet, API to 1Click -->
+  <line x1="64" y1="336" x2="64" y2="390" stroke="#9A9FA8" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text x="76" y="368" class="m" font-size="12" fill="#9A9FA8">connect, one confirmation</text>
+  <line x1="608" y1="336" x2="608" y2="390" stroke="#9A9FA8" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text x="620" y="368" class="m" font-size="12" fill="#9A9FA8">quote, deposit address</text>
+
+  <!-- row 3, left: buyer's wallet -->
+  <rect x="32" y="392" width="320" height="120" rx="16" fill="#0A0B0D" stroke="#2A2B2E"/>
+  <text x="52" y="416" class="m" font-size="12" letter-spacing="1.2" fill="#01FAC0">BUYER'S WALLET</text>
+  <text x="52" y="438" class="w" font-size="16" font-weight="800" fill="#F2F2F0">Phantom, MetaMask, Rabby...</text>
+  <text x="52" y="460" class="m" font-size="12" fill="#9A9FA8">the exact amount, one transfer;</text>
+  <text x="52" y="477" class="m" font-size="12" fill="#9A9FA8">or by hand from any wallet to</text>
+  <text x="52" y="494" class="m" font-size="12" fill="#9A9FA8">the address and QR shown</text>
+
+  <!-- wallet to 1Click: the money path -->
+  <line x1="352" y1="452" x2="446" y2="452" stroke="#01FAC0" stroke-width="1.5" marker-end="url(#am)"/>
+  <text x="400" y="444" class="m" font-size="12" fill="#01FAC0" text-anchor="middle">deposit</text>
+
+  <!-- row 3, right: 1Click -->
+  <rect x="448" y="392" width="320" height="120" rx="16" fill="#0A0B0D" stroke="#2A2B2E"/>
+  <text x="468" y="416" class="m" font-size="12" letter-spacing="1.2" fill="#01FAC0">NEAR INTENTS</text>
+  <text x="468" y="438" class="w" font-size="16" font-weight="800" fill="#F2F2F0">1Click</text>
+  <text x="468" y="460" class="m" font-size="12" fill="#9A9FA8">a one-time deposit address;</text>
+  <text x="468" y="477" class="m" font-size="12" fill="#9A9FA8">solvers fill the exact output;</text>
+  <text x="468" y="494" class="m" font-size="12" fill="#9A9FA8">what is not used goes back</text>
+
+  <!-- 1Click to the merchant: the money path -->
+  <line x1="608" y1="512" x2="608" y2="566" stroke="#01FAC0" stroke-width="1.5" marker-end="url(#am)"/>
+  <text x="620" y="544" class="m" font-size="12" fill="#01FAC0">the invoice, exactly</text>
+
+  <!-- row 4, right: merchant's account -->
+  <rect x="448" y="568" width="320" height="104" rx="16" fill="#0A0B0D" stroke="#01FAC0" stroke-opacity="0.55"/>
+  <text x="468" y="592" class="m" font-size="12" letter-spacing="1.2" fill="#01FAC0">MERCHANT'S ACCOUNT</text>
+  <text x="468" y="614" class="m" font-size="16" font-weight="700" fill="#F2F2F0">shop.near</text>
+  <text x="468" y="636" class="m" font-size="12" fill="#9A9FA8">USDC, USDT or NEAR on NEAR; USDC</text>
+  <text x="468" y="653" class="m" font-size="12" fill="#9A9FA8">on Base, Solana, Arbitrum, Ethereum</text>
+
+  <!-- legend -->
+  <text x="32" y="622" class="m" font-size="12" fill="#7D828B">mint = the path that moves money</text>
+  <text x="32" y="640" class="m" font-size="12" fill="#7D828B">dashed = what tells the merchant</text>
+  <text x="32" y="658" class="m" font-size="12" fill="#7D828B">the shop never bridges</text>
+</svg>

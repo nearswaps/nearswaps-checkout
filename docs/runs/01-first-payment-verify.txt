@@ -1,0 +1,22 @@
+(The first real payment: 2 USDC to tome.near for "Demo shop: coffee" on nearswaps.com/demo-shop, paid from Solana on
+11 Nov 2026 at about 11:00 UTC. The status answer is 01-first-payment-status.json. Re-run against the live API on
+11 Nov 2026 with the commit that added this file. The second "payout transaction" line is a Solana transfer of
+0.0103 USDC back to the buyer: the part of the quote's buffer the route did not use.)
+
+$ node verify-payment.mjs 2C8zc62gRcd7g3PsbvptBpxqYLmpctuxyAKcs8yvE1EB --to tome.near --amount 2 --asset usdc
+info  deposit address: 2C8zc62gRcd7g3PsbvptBpxqYLmpctuxyAKcs8yvE1EB
+info  status call: GET https://nearswaps.com/api/intents?status=2C8zc62gRcd7g3PsbvptBpxqYLmpctuxyAKcs8yvE1EB
+ok    status: SUCCESS (delivered)
+ok    kind: checkout
+ok    quote type: EXACT_OUTPUT
+ok    recipient: tome.near
+ok    destination asset: USDC on NEAR nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1
+ok    invoiced: 2 USDC (2000000)
+ok    delivered: 2 USDC (2000000)
+info  label: "Demo shop: coffee"
+info  refunded to the buyer: 0.0103
+info  payout transaction: GvHFEnPF2CuXzuvEozrbFUWrXeCXwZiy9ZzAp25FcMga
+info  payout transaction: 31CYDg9YSh6BPUz5fer8XEqqh7qF8WjvmGYsJacncs9PgSZR1oDwYn2wmKWWYs9UdwzxVEmTtAQq9MRjMDFuc1eh
+info  updated: 2026-11-11T11:02:56.000Z
+PAID: 2 USDC delivered to tome.near
+(exit code 0)
