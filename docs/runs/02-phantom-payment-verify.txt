@@ -1,0 +1,22 @@
+(The second real payment: 1 USDC to tome.near with the label "Test", paid with one click from Phantom (USDC on
+Solana) on a draft of the pay page with the wallet buttons, 11 Nov 2026; the status was last updated 11:34:41 UTC. The
+status answer is 02-phantom-payment-status.json. Re-run against the live API on 11 Nov 2026. The second "payout
+transaction" line is a Solana transfer of 0.000175 USDC back to the buyer.)
+
+$ node verify-payment.mjs DenPpjHzt9eoikJes5kmqrY4TBTCD1wcHqAqXzHoUFum --to tome.near --amount 1 --asset usdc --label Test
+info  deposit address: DenPpjHzt9eoikJes5kmqrY4TBTCD1wcHqAqXzHoUFum
+info  status call: GET https://nearswaps.com/api/intents?status=DenPpjHzt9eoikJes5kmqrY4TBTCD1wcHqAqXzHoUFum
+ok    status: SUCCESS (delivered)
+ok    kind: checkout
+ok    quote type: EXACT_OUTPUT
+ok    recipient: tome.near
+ok    destination asset: USDC on NEAR nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1
+ok    invoiced: 1 USDC (1000000)
+ok    delivered: 1 USDC (1000000)
+ok    label: "Test"
+info  refunded to the buyer: 0.000175
+info  payout transaction: 8HuJGTb3qcMDrzYr5usXMJEkSHsEoqYEo6PpcECjNT9K
+info  payout transaction: 5aPmFLxonzzQUhUZAZAa7dC5XdfsCuipGveGSsxU8nwAbnQKo6mLFdXGK9hgfmGcYRJErX2scBeKmnYXAWM5FoNc
+info  updated: 2026-11-11T11:34:41.000Z
+PAID: 1 USDC delivered to tome.near
+(exit code 0)

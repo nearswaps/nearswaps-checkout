@@ -138,11 +138,23 @@ verifier prints every hash 1Click lists for the destination side; the second one
 Solana.) That payment was made by hand: refund address typed in, amount and deposit address pasted into the wallet.
 It took long enough that the next thing built was paying from the wallet in the browser.
 
-The second real payment, on 11 Nov 2026 at about 12:30 UTC: 1 USDC to `tome.near`, paid with one click from Phantom
-(USDC on Solana) on a draft of the pay page with the wallet buttons. The page showed "Deposit seen", then "Delivered".
+Two more real payments the same day, both with one click from Phantom (USDC on Solana) through the wallet buttons. The
+page showed "Deposit seen", then "Delivered". The verifier prints PAID and exits 0 for both, with the label checked:
 
-- Deposit address: `<<SECOND PAYMENT DEPOSIT ADDRESS: Tome to supply>>`
-- Check it yourself: `node verify-payment.mjs <<SECOND PAYMENT DEPOSIT ADDRESS>> --to tome.near --amount 1 --asset usdc`
+| | Second payment | Third payment (the demo video) |
+|---|---|---|
+| Invoice | 1 USDC to `tome.near`, label "Test", on a draft of the pay page | 2 USDC to `tome.near`, "Demo shop: coffee", on nearswaps.com/demo-shop |
+| Deposit address | `DenPpjHzt9eoikJes5kmqrY4TBTCD1wcHqAqXzHoUFum` | `7oJ4WHRhr21cwRNG9G2EzVdWhw5rcDNfHPajpQK2pFeE` |
+| Status | `SUCCESS`, updated 2026-11-11T11:34:41Z | `SUCCESS`, updated 2026-11-11T11:41:45Z |
+| Delivered | 1 USDC (`1000000`) on NEAR | 2 USDC (`2000000`) on NEAR |
+| Payout on NEAR | [8HuJGTb3qcMDrzYr5usXMJEkSHsEoqYEo6PpcECjNT9K](https://nearblocks.io/txns/8HuJGTb3qcMDrzYr5usXMJEkSHsEoqYEo6PpcECjNT9K) | [BnF5zaMcm2eDumi4LEt4218fsPKhxpZoJxyHTLfWW87o](https://nearblocks.io/txns/BnF5zaMcm2eDumi4LEt4218fsPKhxpZoJxyHTLfWW87o) |
+| Returned to the buyer | 0.000175 USDC | 0.0103 USDC |
+| Records | [status](docs/runs/02-phantom-payment-status.json), [verifier run](docs/runs/02-phantom-payment-verify.txt) | [status](docs/runs/03-recorded-payment-status.json), [verifier run](docs/runs/03-recorded-payment-verify.txt) |
+
+```bash
+node verify-payment.mjs DenPpjHzt9eoikJes5kmqrY4TBTCD1wcHqAqXzHoUFum --to tome.near --amount 1 --asset usdc --label Test
+node verify-payment.mjs 7oJ4WHRhr21cwRNG9G2EzVdWhw5rcDNfHPajpQK2pFeE --to tome.near --amount 2 --asset usdc --label "Demo shop: coffee"
+```
 
 To take a real payment yourself, put the tag on your page with your own `data-to`, open it over http or https (a page
 opened from disk has no origin, so the pay page cannot send it the "paid" message), pay a small invoice from another
@@ -227,7 +239,7 @@ for the route (in dry quotes on 9 Nov 2026, 0.1 to 0.15 USDC on most routes and 
 | `demo/shop.html`, `demo/assets/demo-shop.js` | the demo shop: three products, the real tag, a "Paid" banner from the `nearswaps:paid` event. On nearswaps.com: `/demo-shop` and `/assets/demo-shop.js` (a file, because the site's Content-Security-Policy runs no inline script) |
 | `verify-payment.mjs` | the payment verifier: Node 18 or later, no packages, exit code 0 when paid |
 | `docs/api.md` | the backend contract: the `checkout` and `status` request and response shapes |
-| `docs/runs/` | the first real payment: its status answer and the verifier's output |
+| `docs/runs/` | the three real payments of 11 Nov 2026: each status answer as the API gave it and the verifier's output |
 | `docs/hero.png`, `docs/architecture.svg` | the images above; `python docs/build-hero.py` rebuilds the hero from `docs/brand/` (Manrope and JetBrains Mono under the SIL Open Font License, licences beside them) |
 | `tests/fixtures/status/` | status answers in the shape of the backend contract (pending, success, refunded, wrong recipient, short amount) for the verifier's tests; the real one is in `docs/runs/` |
 | `tools/serve-local.mjs` | a local copy with a mocked backend: `npm run serve`, then the pay page at http://127.0.0.1:8787/pay?to=shop.near&amount=25, a test shop at http://127.0.0.1:8788/ and the demo shop at http://127.0.0.1:8788/demo-shop. `&wallets=mock` (or `--mock-wallets`) adds a mocked Phantom and MetaMask; `--site <path to the nearswaps site folder>` serves the site's fonts and colours too |

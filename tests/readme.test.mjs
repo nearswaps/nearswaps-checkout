@@ -57,10 +57,29 @@ test("README: the sections the hackathon asks for, and every local link resolves
   }
 });
 
-test("README: what is still to be supplied is marked, and nothing else looks like a placeholder", () => {
-  const marks = [...README.matchAll(/<<[^>]*>>/g)].map((m) => m[0]);
-  for (const m of marks) assert.match(m, /SECOND PAYMENT DEPOSIT ADDRESS/, "an unexpected placeholder: " + m);
+test("README: no placeholder left", () => {
+  assert.deepEqual([...README.matchAll(/<<[^>]*>>/g)].map((m) => m[0]), []);
   assert.ok(!/\b(TODO|TBD|lorem)\b/i.test(README));
+});
+
+test("the second and third real payments: each record passes the verifier offline, matches its saved run and the README", () => {
+  for (const p of [
+    { n: "02-phantom-payment", dep: "DenPpjHzt9eoikJes5kmqrY4TBTCD1wcHqAqXzHoUFum", amount: "1", label: "Test", payout: "8HuJGTb3qcMDrzYr5usXMJEkSHsEoqYEo6PpcECjNT9K", refund: "0.000175" },
+    { n: "03-recorded-payment", dep: "7oJ4WHRhr21cwRNG9G2EzVdWhw5rcDNfHPajpQK2pFeE", amount: "2", label: "Demo shop: coffee", payout: "BnF5zaMcm2eDumi4LEt4218fsPKhxpZoJxyHTLfWW87o", refund: "0.0103" },
+  ]) {
+    const status = JSON.parse(read(`docs/runs/${p.n}-status.json`));
+    const run = read(`docs/runs/${p.n}-verify.txt`);
+    const a = parseArgs([p.dep, "--to", "tome.near", "--amount", p.amount, "--asset", "usdc", "--label", p.label]);
+    const r = verify(status, { to: a.to, asset: a.asset, amountRaw: a.amountRaw, label: a.label });
+    assert.equal(r.paid, true, p.n);
+    const out = run.slice(run.indexOf("$ node verify-payment.mjs")).split("\n");
+    assert.ok(out[0].startsWith(`$ node verify-payment.mjs ${p.dep} --to tome.near --amount ${p.amount} --asset usdc --label `), p.n);
+    assert.deepEqual(out.slice(3, 3 + r.lines.length), r.lines, p.n + ": the live run printed what the recorded answer gives");
+    assert.ok(run.includes("(exit code 0)"), p.n);
+    assert.ok(status.swapDetails.nearTxHashes.includes(p.payout), p.n + ": the payout is a NEAR transaction of this payment");
+    assert.equal(status.swapDetails.refundedAmountFormatted, p.refund);
+    for (const fact of [p.dep, p.payout, p.refund, `docs/runs/${p.n}-status.json`, `docs/runs/${p.n}-verify.txt`]) assert.ok(README.includes(fact), `${p.n}: ${fact}`);
+  }
 });
 
 test("CONTRIBUTING: the one block the wording test skips is short and only names the rules", () => {

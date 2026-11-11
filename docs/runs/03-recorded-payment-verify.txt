@@ -1,0 +1,22 @@
+(The third real payment, the one in the demo video: 2 USDC to tome.near for "Demo shop: coffee" on
+nearswaps.com/demo-shop, paid with one click from Phantom (USDC on Solana), 11 Nov 2026; the status was last updated
+11:41:45 UTC. The status answer is 03-recorded-payment-status.json. Re-run against the live API on 11 Nov 2026. The
+verifier prints every hash 1Click lists for the destination side; 0.0103 USDC went back to the buyer.)
+
+$ node verify-payment.mjs 7oJ4WHRhr21cwRNG9G2EzVdWhw5rcDNfHPajpQK2pFeE --to tome.near --amount 2 --asset usdc --label "Demo shop: coffee"
+info  deposit address: 7oJ4WHRhr21cwRNG9G2EzVdWhw5rcDNfHPajpQK2pFeE
+info  status call: GET https://nearswaps.com/api/intents?status=7oJ4WHRhr21cwRNG9G2EzVdWhw5rcDNfHPajpQK2pFeE
+ok    status: SUCCESS (delivered)
+ok    kind: checkout
+ok    quote type: EXACT_OUTPUT
+ok    recipient: tome.near
+ok    destination asset: USDC on NEAR nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1
+ok    invoiced: 2 USDC (2000000)
+ok    delivered: 2 USDC (2000000)
+ok    label: "Demo shop: coffee"
+info  refunded to the buyer: 0.0103
+info  payout transaction: BnF5zaMcm2eDumi4LEt4218fsPKhxpZoJxyHTLfWW87o
+info  payout transaction: 2YUM4fc7oQQ7vDMePXCKUcAvgaC3DKT337quQgYBvk8iZUrJGSfycokgywHEA8WRsLpS72MUzsovuY1fUiGuLykG
+info  updated: 2026-11-11T11:41:45.000Z
+PAID: 2 USDC delivered to tome.near
+(exit code 0)
