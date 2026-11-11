@@ -238,3 +238,10 @@ test("payOptions: other chains in a fixed order, then NEAR, USDC and USDT on NEA
   assert.equal(o.find((x) => x.symbol === "NEAR").price, 3.2);
   assert.equal(P.payOptions(null).length, 3, "NEAR-side coins even without the list");
 });
+
+test("quoteOrder: the likely picks are quoted first, the rest keep their list order", () => {
+  const rows = [{ symbol: "BTC", chain: "btc" }, { symbol: "ETH", chain: "eth" }, { symbol: "ETH", chain: "base" }, { symbol: "ZEC", chain: "zec" }, { symbol: "USDT", chain: "tron" }, { symbol: "USDC", chain: "sol" }, { symbol: "SOL", chain: "sol" }, { symbol: "NEAR", chain: "near" }];
+  const out = P.quoteOrder(rows).map((r) => r.symbol + "/" + r.chain);
+  assert.deepEqual(out, ["USDC/sol", "SOL/sol", "ETH/base", "ETH/eth", "NEAR/near", "BTC/btc", "ZEC/zec", "USDT/tron"]);
+  assert.deepEqual(rows.map((r) => r.symbol + "/" + r.chain)[0], "BTC/btc", "the input is not reordered");
+});

@@ -324,6 +324,13 @@ export function payOptions(tokensView) {
   const near = NEAR_PAY.map((t) => ({ ...t, price: Number(origins[t.assetId] && origins[t.assetId].price) || 0 }));
   return list.concat(near);
 }
+// The coins buyers pick most, quoted first so the top of the list is priced within a couple of seconds; the rest follow.
+const QUOTE_FIRST = ["USDC/sol", "SOL/sol", "USDC/base", "ETH/base", "USDC/eth", "ETH/eth", "NEAR/near", "USDC/near", "USDT/near", "USDC/arb", "ETH/arb", "USDT/eth", "USDT/sol", "BTC/btc"];
+/** The rows in the order their dry quotes are asked (the list on screen keeps its own order). */
+export function quoteOrder(rows) {
+  const rank = (r) => { const i = QUOTE_FIRST.indexOf(r.symbol + "/" + r.chain); return i < 0 ? QUOTE_FIRST.length : i; };
+  return rows.map((r, i) => [r, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map((x) => x[0]);
+}
 /** The body of a "checkout" quote: the merchant's amount, the coin paid with, and the buyer's refund address. */
 export function checkoutBody(row, inv, refundTo, dry) {
   return { action: "checkout", dry: !!dry, originAsset: row.assetId, destinationAsset: inv.asset.assetId, amount: inv.amountRaw,
@@ -747,9 +754,11 @@ function boot() {
     return li;
   }
   async function quoteAll() {
-    const queue = rows.slice();
+    // Eight quotes in flight at once, the likely picks first: 1Click waits up to 0.8 s for solvers on a dry checkout
+    // quote, so the whole list is priced in a few seconds instead of a quarter of a minute through three lanes.
+    const queue = quoteOrder(rows);
     const worker = async () => { while (queue.length) { const r = queue.shift(); await quoteRow(r); updateRow(r); } };
-    await Promise.all([worker(), worker(), worker()]);
+    await Promise.all(Array.from({ length: 8 }, worker));
   }
   function updateRow(r) {
     const i = rows.indexOf(r), list = $("coins");
